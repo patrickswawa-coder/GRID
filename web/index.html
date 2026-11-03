@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>GRID 7조</title></head>
+<body style="font-family:sans-serif;max-width:640px;margin:40px auto">
+  <h1>GRID 7조 서버 작동 중</h1>
+  <input id="q" style="width:70%" value="원주 무실동의 여름 열섬 현상을 한 문장으로 설명해줘">
+  <button onclick="ask()">AI에게 묻기</button>
+  <p id="a"></p>
+  <script>
+    async function ask() {
+      document.getElementById("a").textContent = "생각 중...";
+      const r = await fetch("/api/ai/explain", {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({text: document.getElementById("q").value})});
+      document.getElementById("a").textContent = (await r.json()).answer;
+    }
+  </script>
+</body></html>
