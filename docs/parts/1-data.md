@@ -2,10 +2,19 @@
 
 담당 폴더: `data/`  결과물: `web/data/voxels.json`
 
-지금은 `make_sample_map.py`가 만든 **가짜 무실동**이 들어가 있음. 이걸 진짜로 바꾸는 게 이 파트의 핵심.
+**11/8 완료: 실제 무실동 맵 적용됨** (V-World GIS건물통합정보 2026-10-09 + 연속지적도형정보 2026-10-08, 강원)
+
+다시 만들 때 (원본 SHP는 레포 맨 위 폴더에, git에는 안 올라감):
+```
+python data/clip_buildings.py AL_D010_51_20261009.shp     # → data/raw/muksil_buildings.gpkg
+python data/clip_parcels.py "AL_D002_51_*.shp"            # → data/raw/muksil_parcels.gpkg
+python data/build_voxels.py --buildings data/raw/muksil_buildings.gpkg --parcels data/raw/muksil_parcels.gpkg
+```
+- 건물: 층수 A26, 높이 A16, 용도 A9 / 지적도: 지목은 A5 끝 글자(대·도·임·공·천…)
+- 범위: 127.9125~127.9380, 37.3260~37.3455 (무실동 전체), 5m 격자 448×438
 
 ## 할 일
-- [ ] **11/8** V-World(vworld.kr) 회원가입 → 인증키 신청 (서비스 URL에 서버 주소 입력)
+- [x] **11/8** V-World(vworld.kr) 회원가입 → 인증키 신청 (서비스 URL에 서버 주소 입력)
 - [ ] **11/9** 건물 데이터 받기: V-World 데이터 다운로드 → 'GIS건물통합정보' → 강원특별자치도 원주시 SHP
   - 받은 파일은 `data/raw/`에 (git에 안 올라감)
 - [ ] **11/9** 컬럼 확인: `python data/build_voxels.py --buildings data/raw/파일.shp --inspect`
