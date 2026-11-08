@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 KST = timezone(timedelta(hours=9))
 BASE = Path(__file__).resolve().parent
 DB_PATH = os.getenv("GRID_DB", str(BASE / "grid.db"))
-MODEL_ID = os.getenv("MODEL_ID", "global.openai.gpt-6-sol")
+MODEL_ID = os.getenv("MODEL_ID", "global.anthropic.claude-haiku-4-5-20251001-v1:0")  # 7조 서버 안내 기준 추천 모델
 AI_ENABLED = os.getenv("AI_ENABLED", "1") == "1"
 # 로컬 개발 때 web/ 폴더까지 같이 서빙 (서버에서는 nginx가 web/을 서빙하므로 0)
 SERVE_WEB = os.getenv("SERVE_WEB", "0") == "1"
