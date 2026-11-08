@@ -174,6 +174,7 @@ function loop() {
     }
   }
   if (labels) labels.update(camera, innerHeight, innerWidth);
+  updateProbe();
   renderer.render(scene, camera);
   checkPerf();
 }
@@ -602,6 +603,55 @@ function heatHTML(x, z) {
   const v = Math.round(heat.value[z * map.meta.width + x]);
   const lv = heatLevel(v);
   return `🌡️ 이 주변 열섬 지수 <b>${v}</b><span class="heat-badge" style="background:${lv.color}">${lv.text}</span>`;
+}
+
+// ---------------------------------------------------------------- 실시간 열섬 지수 읽기
+// PC: 마우스가 가리키는 곳 / 폰(터치): 화면 가운데 십자. 열섬 지도가 켜져 있을 때만.
+const HOVER = matchMedia("(hover: hover) and (pointer: fine)").matches;
+let mouse = null, probeAt = 0;
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const probeHit = new THREE.Vector3();
+canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") mouse = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener("pointerleave", () => { mouse = null; });
+
+// 열섬 지수 → 주변 평균 대비 추정 기온 차이 (PoC 가정: 지수 0점 −3°C ~ 100점 +3°C, 도시 열섬 강도 문헌값 수준)
+const tempOffset = (v) => (v - 50) * 0.06;
+
+function updateProbe() {
+  const el = $("#probe"), ch = $("#crosshair");
+  const show = heatOn && map && (!HOVER || mouse);
+  el.hidden = !show;
+  ch.hidden = !(heatOn && map && !HOVER);
+  if (!show) return;
+  const now = performance.now();
+  if (now - probeAt < (HOVER ? 120 : 90)) return;
+  probeAt = now;
+  const px = HOVER ? mouse.x : innerWidth / 2, py = HOVER ? mouse.y : innerHeight / 2;
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  // PC는 건물까지 정확히 (마우스 아래 건물), 폰은 가벼운 지면 계산
+  const hit = HOVER ? ray.intersectObject(world.buildings, false)[0] : null;
+  if (hit) probeHit.copy(hit.point).addScaledVector(hit.face.normal, -0.01);
+  else if (!ray.ray.intersectPlane(groundPlane, probeHit)) { el.hidden = true; return; }
+  const x = Math.floor(probeHit.x), z = Math.floor(probeHit.z);
+  if (x < 0 || z < 0 || x >= map.meta.width || z >= map.meta.depth) { el.hidden = true; return; }
+  const h = simOn && heatSim ? heatSim : heat;
+  const v = Math.round(h.value[z * map.meta.width + x]);
+  const lv = heatLevel(v);
+  const base = lastEnv?.weather?.temp;
+  const dT = tempOffset(v);
+  const tLine = base != null
+    ? `이곳 추정 <b>${(base + dT).toFixed(1)}°C</b> <small>(기상청 ${base.toFixed(1)}°C ${dT >= 0 ? "+" : ""}${dT.toFixed(1)})</small>`
+    : `<small>동네 평균보다 약 ${dT >= 0 ? "+" : ""}${dT.toFixed(1)}°C (추정)</small>`;
+  let sim = "";
+  if (simOn && heatSim) {
+    const d = Math.round(heat.value[z * map.meta.width + x]) - v;
+    if (d > 0) sim = `<br><small style="color:#2f9e44">시민 제안으로 −${d}점</small>`;
+  }
+  el.style.borderLeftColor = lv.color;
+  el.innerHTML = `🌡️ <span class="v" style="color:${lv.color}">${v}</span><span class="lv" style="color:${lv.color}">${lv.text}</span><br>${tLine}${sim}`;
+  el.classList.toggle("center", !HOVER);
+  if (HOVER) { el.style.left = px + "px"; el.style.top = py + "px"; }
 }
 
 // ---------------------------------------------------------------- 실시간 기온·대기질 (에어코리아·기상청)
