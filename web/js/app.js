@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { MapControls } from "three/addons/controls/MapControls.js";
 import { loadMap, buildScene, heightAt, cellToLatLng, zoneOf } from "./map.js";
 import { makeMarker } from "./markers.js";
+import { loadLabels } from "./labels.js";
 import { TYPES, TYPE_BY_CODE } from "./types.js";
 
 const API = window.GRID_API || ""; // 같은 서버면 빈 문자열
@@ -71,7 +72,7 @@ addEventListener("resize", resize);
 resize();
 
 // ---------------------------------------------------------------- 상태
-let map, world;
+let map, world, labels;
 const markers = new Map(); // id → { obj, data }
 const markerRoot = new THREE.Group();
 scene.add(markerRoot);
@@ -100,6 +101,8 @@ async function start() {
   }
   world = buildScene(map);
   scene.add(world.group);
+  labels = await loadLabels("data/labels.json");
+  scene.add(labels.group);
   const { width: W, depth: D } = map.meta;
   $("#place").textContent = map.meta.name;
   controls.target.set(W / 2, 0, D / 2);
@@ -144,6 +147,7 @@ function loop() {
       obj.position.y = obj.userData.baseY + obj.userData.drop;
     }
   }
+  if (labels) labels.update(camera, innerHeight, innerWidth);
   renderer.render(scene, camera);
   checkPerf();
 }
