@@ -48,3 +48,36 @@ def test_validation():
 def test_summary_without_ai():
     d = client.get("/api/ai/summary").json()
     assert d["ai"] is False and "건" in d["summary"]
+
+
+def test_env_without_key(monkeypatch):
+    monkeypatch.delenv("DATA_GO_KR_KEY", raising=False)
+    main.envdata._cache.update(at=0, data=None)
+    d = client.get("/api/env").json()
+    assert d["air"] is None and "key" in d["errors"]
+
+
+def test_env_with_mocked_apis(monkeypatch):
+    monkeypatch.setenv("DATA_GO_KR_KEY", "x")
+    main.envdata._cache.update(at=0, data=None)
+    air = {"response": {"body": {"items": [
+        {"stationName": "춘천", "pm10Value": "10"},
+        {"stationName": "명륜동", "dataTime": "2026-11-09 01:00", "pm10Value": "32", "pm25Value": "18",
+         "o3Value": "0.021", "no2Value": "0.012", "khaiValue": "55", "khaiGrade": "2", "pm25Grade1h": "2"}]}}}
+    kma = {"response": {"body": {"items": {"item": [
+        {"category": "T1H", "obsrValue": "6.3"}, {"category": "REH", "obsrValue": "71"}, {"category": "WSD", "obsrValue": "1.2"}]}}}}
+
+    def fake(url, params, timeout=8):
+        return air if "Arpltn" in url else kma
+
+    monkeypatch.setattr(main.envdata, "_get_json", fake)
+    d = client.get("/api/env").json()
+    assert d["air"]["station"] == "명륜동" and d["air"]["pm25"] == 18 and d["air"]["grade"] == "보통"
+    assert d["weather"]["temp"] == 6.3 and d["weather"]["humidity"] == 71
+    assert len(client.get("/api/env/history").json()) >= 1
+
+
+def test_kma_grid():
+    # 기상청 격자: 원주 무실동 부근은 nx 76, ny 122 근처
+    nx, ny = main.envdata.latlng_to_grid(37.3355, 127.925)
+    assert 74 <= nx <= 78 and 120 <= ny <= 124

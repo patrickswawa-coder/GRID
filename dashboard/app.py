@@ -47,8 +47,8 @@ def ai_summary():
         return None
 
 
-st.title("🧱 GRID 민원 대시보드")
-st.caption("원주시 무실동 · 시민이 3D 지도 위에 직접 남긴 공간 민원")
+st.title("🧱 GRID 환경·민원 대시보드")
+st.caption("원주시 무실동 · 실시간 환경데이터와 시민이 3D 지도 위에 남긴 환경 개선 제안")
 
 with st.sidebar:
     st.header("필터")
@@ -57,8 +57,40 @@ with st.sidebar:
     st.caption(f"API: {API}")
 
 
+def env_section():
+    """에어코리아·기상청 실시간 값 + 기록 추이 (키가 없으면 안내만)."""
+    try:
+        env = get("/api/env")
+    except Exception:
+        return
+    w, a = env.get("weather") or {}, env.get("air") or {}
+    st.subheader("🌤️ 지금 무실동 환경")
+    if not w and not a:
+        st.caption("실시간 환경데이터 미연결 — 서버 .env 에 DATA_GO_KR_KEY 를 넣어 주세요.")
+        return
+    c = st.columns(4)
+    c[0].metric("기온", f"{w['temp']:.1f}°C" if w.get("temp") is not None else "-")
+    c[1].metric("습도", f"{w['humidity']:.0f}%" if w.get("humidity") is not None else "-")
+    c[2].metric("초미세먼지 PM2.5", f"{a['pm25']:.0f}㎍/㎥" if a.get("pm25") is not None else "-",
+                a.get("pm25_grade") or "", delta_color="off")
+    c[3].metric("미세먼지 PM10", f"{a['pm10']:.0f}㎍/㎥" if a.get("pm10") is not None else "-",
+                a.get("grade") or "", delta_color="off")
+    st.caption(f"출처: 기상청 초단기실황 · 에어코리아 {a.get('station', '')} 측정소 · {env.get('updated_at', '')}")
+    try:
+        hist = pd.DataFrame(get("/api/env/history?hours=72"))
+    except Exception:
+        hist = pd.DataFrame()
+    if len(hist) >= 2:
+        hist["at"] = pd.to_datetime(hist["at"])
+        fig = px.line(hist, x="at", y=["temp", "pm25"], labels={"value": "", "at": "", "variable": ""})
+        fig.for_each_trace(lambda t: t.update(name={"temp": "기온(°C)", "pm25": "PM2.5(㎍/㎥)"}[t.name]))
+        fig.update_layout(height=220, margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", y=1.15))
+        st.plotly_chart(fig, use_container_width=True, key="envhist")
+
+
 @st.fragment(run_every=REFRESH_SEC)
 def board():
+    env_section()
     try:
         rows = get("/api/complaints?limit=2000")
     except Exception as e:
