@@ -20,3 +20,5 @@ data/qr.png
 node_modules/
 .pytest_cache/
 .DS_Store
+parks.csv
+*.csv.bak

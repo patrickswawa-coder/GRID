@@ -120,6 +120,7 @@ def main():
         lat = pd.to_numeric(pk["위도"], errors="coerce"); lng = pd.to_numeric(pk["경도"], errors="coerce")
         area = pd.to_numeric(pk.get("공원면적"), errors="coerce").fillna(0)
         inside = (lat.between(s, n)) & (lng.between(w, e))
+        labels = [l for l in labels if not l["name"].endswith("공원")]  # 건물명에서 나온 공원 이름은 실제 공원 위치로 대체
         added = 0
         for _, r in pk[inside].assign(_a=area[inside]).sort_values("_a", ascending=False).iterrows():
             px, py = tf.transform(float(r["경도"]), float(r["위도"]))

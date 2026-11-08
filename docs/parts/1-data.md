@@ -12,7 +12,7 @@ python data/clip_buildings.py AL_D010_51_20261009.shp     # → data/raw/muksil_
 python data/clip_parcels.py "AL_D002_51_*.shp"            # → data/raw/muksil_parcels.gpkg
 python data/clip_buildings.py TL_SPBD_BULD_51_202610.shp data/raw/muksil_juso_buildings.gpkg   # 도로명주소 건물
 python data/build_voxels.py --buildings data/raw/muksil_buildings.gpkg --extra-buildings data/raw/muksil_juso_buildings.gpkg --parcels data/raw/muksil_parcels.gpkg
-python data/build_labels.py --buildings data/raw/muksil_buildings.gpkg --extra-buildings data/raw/muksil_juso_buildings.gpkg   # 이름표 (직접 추가: data/landmarks_custom.csv)
+python data/build_labels.py --buildings data/raw/muksil_buildings.gpkg --extra-buildings data/raw/muksil_juso_buildings.gpkg   # 공원 이름은 data/raw/parks.csv(전국도시공원정보표준데이터)가 있으면 자동   # 이름표 (직접 추가: data/landmarks_custom.csv)
 ```
 - 건물: 층수 A26, 높이 A16, 용도 A9 / 지적도: 지목은 A5 끝 글자(대·도·임·공·천…)
 - 범위: 127.9125~127.9380, 37.3260~37.3455 (무실동 전체), 5m 격자 448×438
