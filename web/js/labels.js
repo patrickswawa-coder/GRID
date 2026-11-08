@@ -6,27 +6,30 @@ const COLOR = { apt: "#2f6fed", school: "#f08c00", public: "#9c36b5", transit: "
 const PX = innerWidth < 500 ? 22 : 30; // 이름표 화면 높이(px) 목표 (폰은 작게)
 
 function makeTexture(text, kind) {
-  const font = "600 34px -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif";
+  // 고해상도 화면에서도 글자가 흐리지 않게 2배 크기로 그린다
+  const K = 2;
+  const font = `600 ${34 * K}px -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif`;
   const cv = document.createElement("canvas");
   const ctx = cv.getContext("2d");
   ctx.font = font;
   const label = `${ICON[kind] || "📍"} ${text}`;
-  const w = Math.ceil(ctx.measureText(label).width) + 40, h = 60;
+  const w = Math.ceil(ctx.measureText(label).width) + 40 * K, h = 60 * K;
   cv.width = w; cv.height = h;
   ctx.font = font;
   ctx.fillStyle = "rgba(255,255,255,0.94)";
   ctx.strokeStyle = COLOR[kind] || "#495057";
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 4 * K;
   ctx.beginPath();
-  ctx.roundRect(2, 2, w - 4, h - 4, 26);
+  ctx.roundRect(2 * K, 2 * K, w - 4 * K, h - 4 * K, 26 * K);
   ctx.fill();
   ctx.stroke();
   ctx.fillStyle = "#1d2433";
   ctx.textBaseline = "middle";
-  ctx.fillText(label, 20, h / 2 + 2);
+  ctx.fillText(label, 20 * K, h / 2 + 2 * K);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
   return { t, aspect: w / h };
 }
 
