@@ -4,7 +4,7 @@
   python data/build_labels.py --buildings data/raw/muksil_buildings.gpkg
 
 자동으로 못 잡는 장소(예: 롯데시네마)는 data/landmarks_custom.csv 에 한 줄씩 추가:
-  name,lat,lng,kind        ← kind: apt / school / public / shop / transit
+  name,lat,lng,kind        ← kind: apt / school / public / shop / transit / park
 """
 import argparse
 import csv
@@ -23,6 +23,7 @@ from build_voxels import DEFAULT_BBOX, METRIC, add_missing_buildings, read
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parent / "web" / "data" / "labels.json"
 CUSTOM = HERE / "landmarks_custom.csv"
+PARKS = HERE / "raw" / "parks.csv"  # 공공데이터포털 '전국도시공원정보표준데이터' CSV
 
 GENERIC = {"초등학교", "중학교", "고등학교", "중.고등학교", "1", "상가동", "관리동"}
 PUBLIC_KW = ("시청", "청사", "우편", "테마파크", "도서관", "공단", "등록사업소", "지청", "소방", "경찰", "주민센터", "행정복지")
@@ -106,6 +107,29 @@ def main():
     shops = sorted([l for l in labels if l["kind"] == "shop"], key=lambda l: -l["area"])[: a.shops]
     labels = [l for l in labels if l["kind"] != "shop"] + shops
 
+    # 공원 이름 (전국도시공원정보표준데이터: 공원명·위도·경도·공원면적)
+    if PARKS.exists():
+        import pandas as pd
+        for enc in ("cp949", "utf-8-sig"):
+            try:
+                pk = pd.read_csv(PARKS, encoding=enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        pk = pk.rename(columns=lambda c: c.strip())
+        lat = pd.to_numeric(pk["위도"], errors="coerce"); lng = pd.to_numeric(pk["경도"], errors="coerce")
+        area = pd.to_numeric(pk.get("공원면적"), errors="coerce").fillna(0)
+        inside = (lat.between(s, n)) & (lng.between(w, e))
+        added = 0
+        for _, r in pk[inside].assign(_a=area[inside]).sort_values("_a", ascending=False).iterrows():
+            px, py = tf.transform(float(r["경도"]), float(r["위도"]))
+            x, z = int((px - mx0) / a.cell), int((my1 - py) / a.cell)
+            if 0 <= x < W and 0 <= z < D and not any(l["name"] == r["공원명"] for l in labels):
+                labels.append({"name": str(r["공원명"]).strip(), "kind": "park", "x": x, "z": z, "h": 0,
+                               "area": float(r["_a"])})
+                added += 1
+        print(f"공원 이름 {added}개 추가 (parks.csv)")
+
     if CUSTOM.exists():
         with CUSTOM.open(encoding="utf-8-sig") as f:
             for row in csv.DictReader(r for r in f if not r.startswith("#")):
@@ -116,7 +140,7 @@ def main():
                     labels.append({"name": row["name"].strip(), "kind": (row.get("kind") or "shop").strip(),
                                    "x": x, "z": z, "h": h, "area": 10**6})  # 직접 넣은 건 우선 표시
 
-    order = {"public": 0, "transit": 0, "school": 1, "apt": 2, "shop": 3}
+    order = {"public": 0, "transit": 0, "school": 1, "park": 2, "apt": 2, "shop": 3}
     labels.sort(key=lambda l: (order.get(l["kind"], 4), -l["area"]))
     for i, l in enumerate(labels):
         l["rank"] = i

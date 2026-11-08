@@ -1,8 +1,8 @@
 // 큰 건물·아파트·학교 이름표. 겹치면 중요도(rank) 낮은 것부터 숨긴다.
 import * as THREE from "three";
 
-const ICON = { apt: "🏢", school: "🏫", public: "🏛️", transit: "🚌", shop: "🛍️" };
-const COLOR = { apt: "#2f6fed", school: "#2f9e44", public: "#9c36b5", transit: "#e8590c", shop: "#495057" };
+const ICON = { apt: "🏢", school: "🏫", public: "🏛️", transit: "🚌", shop: "🛍️", park: "🌳" };
+const COLOR = { apt: "#2f6fed", school: "#f08c00", public: "#9c36b5", transit: "#e8590c", shop: "#495057", park: "#2f9e44" };
 const PX = 30; // 이름표 화면 높이(px) 목표
 
 function makeTexture(text, kind) {
