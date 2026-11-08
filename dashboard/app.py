@@ -31,7 +31,7 @@ TYPE_COLORS = {
 }
 URGENCY = {3: "🔴 높음", 2: "🟠 보통", 1: "🟢 낮음"}
 
-st.set_page_config(page_title="GRID 민원 대시보드", page_icon="🧱", layout="wide")
+st.set_page_config(page_title="GRID 환경 대시보드", page_icon="🧱", layout="wide")
 st.markdown(
     "<style>div[data-testid='stMetricValue']{font-size:1.9rem} .block-container{padding-top:1.5rem}</style>",
     unsafe_allow_html=True,
@@ -42,6 +42,97 @@ def get(path):
     r = requests.get(API + path, timeout=15)
     r.raise_for_status()
     return r.json()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def ai_policy():
+    try:
+        return get("/api/ai/policy")
+    except Exception:
+        return None
+
+
+FIX_TYPES = ["tree", "pocketpark", "shade", "coolfog", "greenroof", "coolpave"]
+HEAT_STOPS = [(0, (47, 158, 68)), (35, (148, 216, 45)), (55, (252, 216, 60)), (70, (252, 160, 30)), (85, (240, 80, 40)), (100, (190, 25, 45))]
+
+
+def heat_rgb(v):
+    """web/js/heat.js heatRGB 와 같은 색"""
+    for (a, ca), (b, cb) in zip(HEAT_STOPS, HEAT_STOPS[1:]):
+        if v <= b:
+            t = (v - a) / (b - a)
+            return [round(x + (y - x) * t) for x, y in zip(ca, cb)]
+    return list(HEAT_STOPS[-1][1])
+
+
+def priority_section():
+    """열섬 지수(서버 계산) × 시민 제안·신고·공감 → 우선 개선 구역"""
+    try:
+        pr = pd.DataFrame(get("/api/priority?limit=300"))
+    except Exception as e:
+        st.caption(f"우선순위 계산을 불러오지 못했어요: {e}")
+        return
+    if pr.empty:
+        return
+    st.subheader("🎯 우선 개선 구역 — 열섬 위험 × 시민 요구")
+    st.caption("200m 구역별 · 점수 = 열섬 지수(상위 10% 칸) 60% + 시민 요구(제안·신고·공감) 40% · "
+               "'실현 시'는 그 구역 시민 개선 제안이 모두 시행됐을 때의 시뮬레이션")
+    top3 = pr.head(3)
+    cols = st.columns(3)
+    medal = ["🥇", "🥈", "🥉"]
+    for col, (_, z) in zip(cols, top3.iterrows()):
+        with col.container(border=True):
+            st.markdown(f"#### {medal[z['rank'] - 1]} {z['name']}")
+            a, b = st.columns(2)
+            a.metric("우선순위 점수", f"{z['score']:.0f}")
+            b.metric("열섬 지수", f"{z['heat_p90']:.0f}", help="구역 안에서 가장 뜨거운 10% 칸의 지수")
+            want = TYPE_LABELS.get(z["top_type"], "-") if z["top_type"] else "제안 없음"
+            st.markdown(f"시민 제안 **{z['proposals']}건** · 신고 {z['reports']}건 · 공감 {z['likes']}  \n"
+                        f"가장 많은 요청: **{want}**  \n"
+                        f"제안 실현 시 구역 평균 **{z['heat']:.0f} → {z['heat_after']:.0f}**"
+                        + (f" (−{z['delta']:.1f})" if z["delta"] > 0 else ""))
+
+    left, right = st.columns([3, 2])
+    with left:
+        pr["color"] = pr["heat_p90"].apply(heat_rgb)
+        pr["demand"] = pr["proposals"] + pr["reports"] + pr["likes"] / 2
+        pr["elev"] = 15 + pr["demand"] * 25
+        mp = pr[(pr["built"] > 0.02) | (pr["demand"] > 0)]
+        view = pdk.ViewState(latitude=mp["lat"].mean(), longitude=mp["lng"].mean(), zoom=13.4, pitch=45, bearing=-10)
+        layer = pdk.Layer("ColumnLayer", mp, get_position="[lng, lat]", get_elevation="elev", elevation_scale=1,
+                          radius=70, get_fill_color="color", pickable=True, auto_highlight=True, extruded=True,
+                          coverage=0.9)
+        st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view, map_style="light",
+                                 tooltip={"text": "{rank}위 {name}\n점수 {score} · 열섬 {heat_p90}\n제안 {proposals} · 신고 {reports} · 공감 {likes}"}),
+                        height=380)
+        st.caption("기둥 색 = 열섬 지수(초록→빨강), 기둥 높이 = 시민 요구")
+    with right:
+        q = pr[pr["built"] > 0.02]
+        fig = px.scatter(q, x="heat_p90", y="demand", size=q["score"].clip(lower=5), color="heat_p90",
+                         color_continuous_scale=["#2f9e44", "#94d82d", "#fcd83c", "#fca01e", "#f05028", "#be192d"],
+                         range_color=[0, 100], hover_name="name",
+                         labels={"heat_p90": "열섬 지수 (상위 10%)", "demand": "시민 요구"})
+        xm, ym = 70, max(1.0, q["demand"].quantile(0.75))
+        fig.add_vline(x=xm, line_dash="dot", line_color="#adb5bd")
+        fig.add_hline(y=ym, line_dash="dot", line_color="#adb5bd")
+        fig.add_annotation(x=97, y=q["demand"].max() * 1.05 + 0.5, text="우선 개선", showarrow=False,
+                           font=dict(color="#e03131", size=13), xanchor="right")
+        fig.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0), coloraxis_showscale=False)
+        st.plotly_chart(fig, use_container_width=True, key="quad")
+
+    with st.expander("📋 구역별 우선순위 표 (TOP 15)"):
+        t = pr.head(15)[["rank", "name", "score", "heat_p90", "heat", "heat_after", "proposals", "reports", "likes"]]
+        t.columns = ["순위", "구역", "점수", "열섬(상위10%)", "열섬 평균", "실현 시 평균", "제안", "신고", "공감"]
+        st.dataframe(t, use_container_width=True, hide_index=True)
+        st.download_button("우선순위 CSV", t.to_csv(index=False).encode("utf-8-sig"),
+                           file_name=f"grid_우선개선구역_{datetime.now():%Y%m%d_%H%M}.csv", mime="text/csv")
+
+    st.session_state["zone_names"] = dict(zip(pr["zone"], pr["name"]))
+    st.subheader("🏛️ AI 정책 제안")
+    p = ai_policy()
+    if p:
+        st.success(p["text"])
+        st.caption(("AI 분석 (Amazon Bedrock)" if p.get("ai") else "규칙 기반 제안 (AI 미연결)") + f" · {p['generated_at']}")
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -96,6 +187,8 @@ def env_section():
 @st.fragment(run_every=REFRESH_SEC)
 def board():
     env_section()
+    priority_section()
+    st.divider()
     try:
         rows = get("/api/complaints?limit=2000")
     except Exception as e:
@@ -122,12 +215,13 @@ def board():
     c[0].metric("전체 민원", f"{len(df)}건")
     c[1].metric("오늘 접수", f"{int((df['created_at'] >= today).sum())}건")
     c[2].metric("최다 요청", by_type.index[0], f"{by_type.iloc[0]}건", delta_color="off")
-    c[3].metric("최다 구역", by_zone.index[0], f"{by_zone.iloc[0]}건", delta_color="off")
+    names = st.session_state.get("zone_names", {})
+    c[3].metric("최다 구역", names.get(by_zone.index[0], by_zone.index[0]).replace(" 주변", ""), f"{by_zone.iloc[0]}건", delta_color="off")
     c[4].metric("AI 긴급 판정", f"{urgent}건")
 
     left, right = st.columns([3, 2])
     with left:
-        st.subheader("📍 민원 위치 분포")
+        st.subheader("📍 제안·신고 위치")
         df["color"] = df["type"].map(TYPE_COLORS).apply(lambda v: v if isinstance(v, list) else [120, 120, 120])
         layers = [
             pdk.Layer("HeatmapLayer", df, get_position="[lng, lat]", get_weight="1 + likes",
@@ -152,7 +246,7 @@ def board():
         top = top.sort_values(["건수", "공감"], ascending=False).head(5).rename_axis("구역")
         st.dataframe(top, use_container_width=True)
 
-    st.subheader("🤖 AI 민원 요약")
+    st.subheader("🤖 AI 제안·신고 요약")
     s = ai_summary()
     if s:
         st.info(s["summary"])
@@ -160,7 +254,7 @@ def board():
     else:
         st.caption("요약을 불러오지 못했어요.")
 
-    st.subheader("📋 공감 많은 민원")
+    st.subheader("📋 공감 많은 제안·신고")
     show = df.sort_values(["likes", "id"], ascending=False)[["id", "유형", "zone", "text", "likes", "ai_urgency", "created_at"]]
     show = show.assign(ai_urgency=show["ai_urgency"].map(URGENCY))
     show.columns = ["번호", "유형", "구역", "내용", "공감", "AI 긴급도", "접수 시각"]

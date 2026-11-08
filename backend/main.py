@@ -110,6 +110,10 @@ import envdata  # noqa: E402  실시간 대기질·기온 (/api/env)
 envdata._db = db
 app.include_router(envdata.router)
 
+import heatmodel  # noqa: E402  구역별 열섬 × 시민 제안 우선순위 (/api/priority)
+
+app.include_router(heatmodel.router)
+
 
 def row_to_dict(row: sqlite3.Row) -> dict:
     return dict(row)
@@ -306,6 +310,47 @@ def _rule_summary() -> str:
         parts.append(f"민원이 가장 몰린 구역은 {z['zone']}({z['count']}건)이며 주로 "
                      f"'{TYPE_NAMES.get(z['top_type'], z['top_type'])}' 요청입니다.")
     return " ".join(parts)
+
+
+_policy_cache: dict = {"key": None, "data": None}
+
+
+@app.get("/api/ai/policy")
+def ai_policy():
+    """우선 개선 구역 TOP 3 → 공무원용 정책 제안 (AI, 실패 시 규칙 기반)."""
+    top = heatmodel.api_priority(limit=3)
+    key = tuple((z["zone"], z["proposals"], z["reports"], z["likes"]) for z in top)
+    if _policy_cache["key"] == key and _policy_cache["data"]:
+        return _policy_cache["data"]
+    lines = []
+    for z in top:
+        kinds = ", ".join(f"{TYPE_NAMES.get(t, t)} {n}건" for t, n in sorted(z["types"].items(), key=lambda kv: -kv[1])) or "없음"
+        lines.append(f"{z['rank']}위 {z['name']}: 열섬 지수 평균 {z['heat']}(상위10% {z['heat_p90']}), "
+                     f"시민 제안 {z['proposals']}건·신고 {z['reports']}건·공감 {z['likes']}, 요청 내역 [{kinds}], "
+                     f"제안 실현 시 평균 {z['heat']}→{z['heat_after']}")
+    data = None
+    if AI_ENABLED and top:
+        prompt = ("너는 원주시 기후·환경 정책 담당 주무관을 돕는 분석가야. 아래는 무실동 200m 구역별 열섬 위험 지수(0~100, 높을수록 뜨거움)와 "
+                  "시민이 3D 지도에 남긴 환경 개선 제안 분석 결과야. 우선 개선 구역 3곳 각각에 대해 '왜 우선인지'와 "
+                  "'구체적 사업 제안(예: 가로수 식재, 그늘막, 쿨링포그, 옥상녹화, 투수포장)'을 한 문단씩, 마지막에 한 줄 총평. "
+                  "숫자는 아래 자료에 있는 것만 쓰고, 추정 사업비나 없는 통계는 만들지 마. 한국어, 보고서 문체.\n\n" + "\n".join(lines))
+        try:
+            data = {"text": ask_model(prompt, 700).strip(), "generated_at": now_kst(), "ai": True}
+        except Exception as e:
+            print(f"[ai_policy] fallback: {e}")
+    if data is None:
+        if not top:
+            text = "분석할 구역이 없습니다."
+        else:
+            parts = []
+            for z in top:
+                rec = TYPE_NAMES.get(z["top_type"], "가로수 심기") if z["top_type"] in heatmodel.FIX else "가로수 심기·그늘막"
+                parts.append(f"{z['rank']}위 {z['name']} — 열섬 지수 {z['heat_p90']}(상위 10%)로 높고 시민 제안 {z['proposals']}건이 모였습니다. "
+                             f"'{rec}' 중심 사업을 우선 검토하면 구역 평균 지수가 {z['heat']}→{z['heat_after']}로 낮아질 것으로 추정됩니다.")
+            text = "\n\n".join(parts)
+        data = {"text": text, "generated_at": now_kst(), "ai": False}
+    _policy_cache.update(key=key, data=data)
+    return data
 
 
 @app.post("/api/ai/explain")
