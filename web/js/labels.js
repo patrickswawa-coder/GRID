@@ -3,7 +3,7 @@ import * as THREE from "three";
 
 const ICON = { apt: "🏢", school: "🏫", public: "🏛️", transit: "🚌", shop: "🛍️", park: "🌳" };
 const COLOR = { apt: "#2f6fed", school: "#f08c00", public: "#9c36b5", transit: "#e8590c", shop: "#495057", park: "#2f9e44" };
-const PX = 30; // 이름표 화면 높이(px) 목표
+const PX = innerWidth < 500 ? 22 : 30; // 이름표 화면 높이(px) 목표 (폰은 작게)
 
 function makeTexture(text, kind) {
   const font = "600 34px -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif";
@@ -74,5 +74,5 @@ export async function loadLabels(url) {
       s.visible = show;
     }
   }
-  return { group, update, count: items.length };
+  return { group, update, count: items.length, items: list };
 }

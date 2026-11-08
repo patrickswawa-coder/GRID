@@ -4,6 +4,7 @@ import { MapControls } from "three/addons/controls/MapControls.js";
 import { loadMap, buildScene, heightAt, cellToLatLng, zoneOf } from "./map.js";
 import { makeMarker } from "./markers.js";
 import { loadLabels } from "./labels.js";
+import { computeHeat, paintHeat, heatLevel, zoneHeat } from "./heat.js";
 import { TYPES, TYPE_BY_CODE } from "./types.js";
 
 const API = window.GRID_API || ""; // 같은 서버면 빈 문자열
@@ -72,7 +73,7 @@ addEventListener("resize", resize);
 resize();
 
 // ---------------------------------------------------------------- 상태
-let map, world, labels;
+let map, world, labels, heat, heatOn = false;
 const markers = new Map(); // id → { obj, data }
 const markerRoot = new THREE.Group();
 scene.add(markerRoot);
@@ -103,6 +104,12 @@ async function start() {
   scene.add(world.group);
   labels = await loadLabels("data/labels.json");
   scene.add(labels.group);
+  heat = computeHeat(map);
+  const zh = Object.entries(zoneHeat(map, heat)).sort((p, q) => q[1] - p[1]);
+  const avg = Math.round(heat.value.reduce((t, v) => t + v, 0) / heat.value.length);
+  $("#heatAvg").textContent = avg;
+  $("#heatTop").textContent = `${nearestLabel(zh[0][0])} (${zh[0][1]})`;
+  if (new URLSearchParams(location.search).has("heat")) setHeat(true);
   const { width: W, depth: D } = map.meta;
   $("#place").textContent = map.meta.name;
   controls.target.set(W / 2, 0, D / 2);
@@ -264,6 +271,7 @@ function selectCell(x, z) {
   cursor.position.set(x + 0.5, y, z + 0.5);
   cursor.visible = true;
   $("#zone").textContent = `구역 ${zoneOf(map.meta, x, z)}`;
+  $("#heatInfo").innerHTML = heatHTML(x, z);
   closeDetail();
   openSheet();
   if (chosenType) chooseType(chosenType);
@@ -342,6 +350,7 @@ function showDetail(c) {
   const t = TYPE_BY_CODE[c.type] || TYPE_BY_CODE.other;
   $("#d-type").textContent = `${t.icon} ${t.label}`;
   $("#d-zone").textContent = `구역 ${c.zone}`;
+  $("#d-heat").innerHTML = heatHTML(c.x, c.z);
   $("#d-text").textContent = c.text;
   $("#d-time").textContent = new Date(c.created_at).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
   $("#d-like").textContent = `👍 공감 ${c.likes}`;
@@ -366,6 +375,36 @@ $("#d-like").onclick = async () => {
 };
 function likedIds() {
   try { return JSON.parse(localStorage.getItem("grid-liked") || "[]"); } catch { return []; }
+}
+
+// ---------------------------------------------------------------- 열섬 레이어
+function setHeat(on) {
+  heatOn = on;
+  paintHeat(world, map, heat, on);
+  $("#heatBtn").setAttribute("aria-pressed", String(on));
+  $("#legend").hidden = !on;
+  if (on) toast("빨간 곳일수록 여름철 열이 많이 쌓이는 곳이에요 🌡️", 3500);
+}
+$("#heatBtn").onclick = () => heat && setHeat(!heatOn);
+
+// 구역 코드(H1) 대신 그 구역 안 가장 중요한 이름표로 부르기
+function nearestLabel(zone) {
+  const s = map.meta.zone_size || 40;
+  const zx = zone.charCodeAt(0) - 65, zz = parseInt(zone.slice(1), 10) - 1;
+  const cx = zx * s + s / 2, cz = zz * s + s / 2;
+  let best = null, bd = Infinity;
+  for (const l of labels?.items || []) {
+    const d = Math.hypot(l.x - cx, l.z - cz);
+    if (d < bd) { bd = d; best = l; }
+  }
+  return best && bd < s * 1.2 ? `${best.name} 주변` : `구역 ${zone}`;
+}
+
+function heatHTML(x, z) {
+  if (!heat) return "";
+  const v = Math.round(heat.value[z * map.meta.width + x]);
+  const lv = heatLevel(v);
+  return `🌡️ 이 주변 열섬 지수 <b>${v}</b><span class="heat-badge" style="background:${lv.color}">${lv.text}</span>`;
 }
 
 // ---------------------------------------------------------------- 토스트
