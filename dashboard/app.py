@@ -17,12 +17,17 @@ API = os.getenv("GRID_API", "http://127.0.0.1:8000")
 REFRESH_SEC = 10
 
 TYPE_LABELS = {
-    "streetlight": "💡 가로등", "bench": "🪑 벤치", "trash": "🗑️ 쓰레기통",
-    "tree": "🌳 가로수·녹지", "walkway": "🚶 보행로 개선", "other": "❗ 기타",
+    "tree": "🌳 가로수 심기", "pocketpark": "🌿 소공원·녹지", "shade": "⛱️ 그늘막", "coolfog": "💧 쿨링포그",
+    "greenroof": "🏠 옥상녹화", "coolpave": "🧱 투수·차열 포장",
+    "trash": "🗑️ 쓰레기·무단투기", "odor": "😷 악취·매연", "noise": "🔊 소음", "other": "❗ 기타",
+    # 예전 유형
+    "streetlight": "💡 가로등", "bench": "🪑 벤치", "walkway": "🚶 보행로 개선",
 }
 TYPE_COLORS = {
-    "streetlight": [245, 197, 66], "bench": [160, 103, 58], "trash": [63, 143, 90],
-    "tree": [47, 158, 68], "walkway": [76, 139, 245], "other": [232, 89, 12],
+    "tree": [47, 158, 68], "pocketpark": [55, 178, 77], "shade": [28, 126, 214], "coolfog": [21, 170, 191],
+    "greenroof": [130, 201, 30], "coolpave": [134, 142, 150], "trash": [134, 142, 150], "odor": [156, 54, 181],
+    "noise": [232, 89, 12], "other": [73, 80, 87],
+    "streetlight": [245, 197, 66], "bench": [160, 103, 58], "walkway": [76, 139, 245],
 }
 URGENCY = {3: "🔴 높음", 2: "🟠 보통", 1: "🟢 낮음"}
 
@@ -52,7 +57,7 @@ st.caption("원주시 무실동 · 실시간 환경데이터와 시민이 3D 지
 
 with st.sidebar:
     st.header("필터")
-    sel_types = st.multiselect("민원 유형", list(TYPE_LABELS), format_func=TYPE_LABELS.get, placeholder="전체 유형")
+    sel_types = st.multiselect("제안·신고 유형", list(TYPE_LABELS)[:10], format_func=TYPE_LABELS.get, placeholder="전체 유형")
     st.caption(f"{REFRESH_SEC}초마다 자동 새로고침")
     st.caption(f"API: {API}")
 

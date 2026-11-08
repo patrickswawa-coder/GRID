@@ -4,8 +4,8 @@ import { MapControls } from "three/addons/controls/MapControls.js";
 import { loadMap, buildScene, heightAt, cellToLatLng, zoneOf } from "./map.js";
 import { makeMarker } from "./markers.js";
 import { loadLabels } from "./labels.js";
-import { computeHeat, paintHeat, heatLevel, zoneHeat } from "./heat.js";
-import { TYPES, TYPE_BY_CODE } from "./types.js";
+import { computeHeat, paintHeat, heatLevel, zoneHeat, scoreAt, buildMods, meanHeat, heatRGB } from "./heat.js";
+import { TYPES, TYPE_BY_CODE, FIX_TYPES, REPORT_TYPES } from "./types.js";
 
 const API = window.GRID_API || ""; // 같은 서버면 빈 문자열
 const POLL_MS = 8000;
@@ -74,6 +74,8 @@ resize();
 
 // ---------------------------------------------------------------- 상태
 let map, world, labels, heat, heatOn = false;
+let simOn = false, heatSim = null, baseAvg = 0, lastEnv = null;
+const hiddenTypes = new Set();
 const markers = new Map(); // id → { obj, data }
 const markerRoot = new THREE.Group();
 scene.add(markerRoot);
@@ -92,6 +94,15 @@ cursor.renderOrder = 20;
 cursor.visible = false;
 scene.add(cursor);
 
+// 개선 제안의 영향 범위(정사각형) 미리보기
+const footprint = new THREE.Mesh(
+  new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0x40c057, transparent: true, opacity: 0.35, depthWrite: false })
+);
+footprint.renderOrder = 4;
+footprint.visible = false;
+scene.add(footprint);
+
 // ---------------------------------------------------------------- 시작
 async function start() {
   try {
@@ -105,9 +116,9 @@ async function start() {
   labels = await loadLabels("data/labels.json");
   scene.add(labels.group);
   heat = computeHeat(map);
+  baseAvg = meanHeat(heat);
   const zh = Object.entries(zoneHeat(map, heat)).sort((p, q) => q[1] - p[1]);
-  const avg = Math.round(heat.value.reduce((t, v) => t + v, 0) / heat.value.length);
-  $("#heatAvg").textContent = avg;
+  $("#heatAvg").textContent = Math.round(baseAvg);
   $("#heatTop").textContent = `${nearestLabel(zh[0][0])} (${zh[0][1]})`;
   if (new URLSearchParams(location.search).has("heat")) setHeat(true);
   loadEnv();
@@ -125,7 +136,10 @@ async function start() {
   await poll();
   setInterval(poll, POLL_MS);
   $("#loading").remove();
-  toast("개선이 필요한 위치를 눌러 주세요 👆", 3500);
+  let seen = false;
+  try { seen = localStorage.getItem("grid-intro") === "1"; } catch {}
+  if (!seen && !new URLSearchParams(location.search).has("demo")) $("#intro").hidden = false;
+  else toast("바꾸고 싶은 위치를 눌러 주세요 👆", 3500);
 }
 
 function loop() {
@@ -192,6 +206,7 @@ async function poll() {
   try {
     const list = await api(`/api/complaints?since_id=${lastId}`);
     for (const c of list) addMarker(c, false);
+    if (list.length) onProposalsChanged();
     $("#count").textContent = markers.size;
     $("#offline").hidden = true;
   } catch {
@@ -205,6 +220,7 @@ function addMarker(c, animate) {
   const baseY = heightAt(map, c.x, c.z);
   obj.position.set(c.x + 0.5, baseY, c.z + 0.5);
   obj.userData = { ...obj.userData, id: c.id, baseY, drop: animate ? 25 : 0 };
+  obj.visible = !hiddenTypes.has(c.type);
   markerRoot.add(obj);
   markers.set(c.id, { obj, data: c });
   lastId = Math.max(lastId, c.id);
@@ -232,6 +248,7 @@ function onTap(px, py) {
   let best = null, bestD = 28;
   const v = new THREE.Vector3();
   for (const { obj, data } of markers.values()) {
+    if (!obj.visible) continue;
     obj.userData.sprite.getWorldPosition(v).project(camera);
     if (v.z > 1) continue;
     const sx = (v.x + 1) / 2 * innerWidth, sy = (1 - v.y) / 2 * innerHeight;
@@ -255,15 +272,17 @@ function onTap(px, py) {
 
 // ---------------------------------------------------------------- 등록 시트
 function buildTypeButtons() {
-  const box = $("#types");
-  for (const t of TYPES) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "type";
-    b.dataset.code = t.code;
-    b.innerHTML = `<span class="ic">${t.icon}</span><span>${t.label}</span>`;
-    b.onclick = () => chooseType(t.code);
-    box.append(b);
+  for (const [box, list] of [[$("#types-fix"), FIX_TYPES], [$("#types-report"), REPORT_TYPES]]) {
+    for (const t of list) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "type";
+      b.dataset.code = t.code;
+      b.title = t.desc || t.label;
+      b.innerHTML = `<span class="ic">${t.icon}</span><span>${t.label}</span>`;
+      b.onclick = () => chooseType(t.code);
+      box.append(b);
+    }
   }
 }
 
@@ -286,8 +305,34 @@ function chooseType(code) {
   ghost = makeMarker(code, { ghost: true });
   ghost.position.set(selected.x + 0.5, heightAt(map, selected.x, selected.z), selected.z + 0.5);
   markerRoot.add(ghost);
-  $("#text").placeholder = `${TYPE_BY_CODE[code].label} 관련 의견을 짧게 적어 주세요`;
+  const t = TYPE_BY_CODE[code];
+  $("#text").placeholder = t.group === "fix" ? `왜 여기에 ${t.label}이(가) 필요한지 짧게 적어 주세요` : `${t.label} 상황을 짧게 적어 주세요`;
+  showEffect(t);
   updateSubmit();
+}
+
+// 놓기 전에 "이 블록 하나로 주변 지수가 얼마나 내려가는지" 계산해 보여준다
+function showEffect(t) {
+  const el = $("#effectInfo");
+  el.className = "effect-info";
+  footprint.visible = false;
+  if (!t.effect || !selected) { el.innerHTML = ""; return; }
+  const { x, z } = selected;
+  const onRoof = heightAt(map, x, z) > 0;
+  if (t.roofOnly && !onRoof) {
+    el.classList.add("warn");
+    el.innerHTML = "🏠 옥상녹화는 <b>건물 옥상</b>을 눌러야 효과가 있어요";
+    return;
+  }
+  const before = scoreAt(map, x, z);
+  const after = scoreAt(map, x, z, buildMods(map, [{ type: t.code, x, z }], TYPE_BY_CODE));
+  const d = Math.round(before) - Math.round(after);
+  const m = (t.effect.size * (map.meta.cell || 5));
+  el.innerHTML = `${t.icon} ${t.desc} · 약 ${m}m×${m}m<br>놓으면 이 주변 열섬 지수 <b>${Math.round(before)} → ${Math.round(after)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})`;
+  const sz = t.effect.size;
+  footprint.scale.set(sz, 1, sz);
+  footprint.position.set(x + 0.5, (t.roofOnly ? heightAt(map, x, z) : 0) + 0.06, z + 0.5);
+  footprint.visible = true;
 }
 
 function updateSubmit() {
@@ -312,6 +357,8 @@ function closeSheet() {
   document.body.classList.remove("sheet-open");
   liftView(null);
   cursor.visible = false;
+  footprint.visible = false;
+  $("#effectInfo").innerHTML = "";
   if (ghost) markerRoot.remove(ghost);
   ghost = null;
   selected = null;
@@ -321,6 +368,10 @@ $("#cancel").onclick = closeSheet;
 $("#form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!selected || !chosenType) return;
+  if (TYPE_BY_CODE[chosenType].roofOnly && heightAt(map, selected.x, selected.z) === 0) {
+    toast("옥상녹화는 건물 옥상을 눌러 주세요 🏠");
+    return;
+  }
   const btn = $("#submit");
   btn.disabled = true;
   btn.textContent = "등록 중…";
@@ -337,11 +388,12 @@ $("#form").addEventListener("submit", async (e) => {
     $("#count").textContent = markers.size;
     $("#text").value = "";
     closeSheet();
-    toast(`등록됐어요! 구역 ${c.zone}에 ${TYPE_BY_CODE[c.type].label} 블록을 놓았어요 🎉`);
+    onProposalsChanged();
+    toast(`등록됐어요! ${TYPE_BY_CODE[c.type].icon} ${TYPE_BY_CODE[c.type].label} 블록을 놓았어요 🎉`);
   } catch (err) {
     toast(err.message);
   } finally {
-    btn.textContent = "민원 등록";
+    btn.textContent = "제안 등록";
     updateSubmit();
   }
 });
@@ -382,14 +434,140 @@ function likedIds() {
 }
 
 // ---------------------------------------------------------------- 열섬 레이어
-function setHeat(on) {
+function setHeat(on, quiet = false) {
   heatOn = on;
-  paintHeat(world, map, heat, on);
-  $("#heatBtn").setAttribute("aria-pressed", String(on));
+  if (!on && simOn) setSim(false, true);
+  paintHeat(world, map, simOn ? heatSim : heat, on);
+  $("#tool-heat").setAttribute("aria-pressed", String(on));
   $("#legend").hidden = !on;
-  if (on) toast("빨간 곳일수록 여름철 열이 많이 쌓이는 곳이에요 🌡️", 3500);
+  if (on && !quiet) toast("빨간 곳일수록 여름철 열이 많이 쌓이는 곳이에요 🌡️", 3500);
 }
-$("#heatBtn").onclick = () => heat && setHeat(!heatOn);
+$("#tool-heat").onclick = () => heat && setHeat(!heatOn);
+
+// ---------------------------------------------------------------- 시민 제안 효과 시뮬레이션
+// 영향권(지수가 0.5 이상 내려간 칸)만 따로 평균 — 동네 전체 평균은 면적이 커서 변화가 묻힌다
+function simStats(base, sim) {
+  let n = 0, b = 0, a = 0, big = 0;
+  for (let i = 0; i < base.value.length; i++) {
+    const d = base.value[i] - sim.value[i];
+    if (d >= 0.5) { n++; b += base.value[i]; a += sim.value[i]; if (d >= 3) big++; }
+  }
+  const cellHa = (map.meta.cell || 5) ** 2 / 10000;
+  return { ha: n * cellHa, before: n ? b / n : 0, after: n ? a / n : 0, bigHa: big * cellHa };
+}
+function proposals() {
+  return [...markers.values()].map((m) => m.data).filter((c) => TYPE_BY_CODE[c.type]?.effect);
+}
+function setSim(on, quiet = false) {
+  simOn = on;
+  $("#tool-sim").setAttribute("aria-pressed", String(on));
+  if (on) {
+    heatSim = computeHeat(map, buildMods(map, proposals(), TYPE_BY_CODE));
+    if (!heatOn) setHeat(true, true);
+    paintHeat(world, map, heatSim, true);
+    const st = simStats(heat, heatSim);
+    $("#heatAvg").innerHTML = `${Math.round(baseAvg)} · 제안 영향권 ${st.ha.toFixed(1)}ha <span style="color:#2f9e44">${Math.round(st.before)} → ${Math.round(st.after)}</span>`;
+    if (!quiet) toast(`시민 제안 ${proposals().length}건이 실현되면 영향권 ${st.ha.toFixed(1)}ha가 평균 ${Math.round(st.before)} → ${Math.round(st.after)}로 시원해져요 ✨`, 5000);
+  } else {
+    heatSim = null;
+    $("#heatAvg").textContent = Math.round(baseAvg);
+    if (heatOn) paintHeat(world, map, heat, true);
+  }
+  renderReport();
+}
+$("#tool-sim").onclick = () => heat && setSim(!simOn);
+function onProposalsChanged() {
+  if (simOn) setSim(true, true);
+  else renderReport();
+}
+
+// ---------------------------------------------------------------- 나머지 도구
+$("#tool-labels").onclick = () => {
+  if (!labels) return;
+  labels.group.visible = !labels.group.visible;
+  $("#tool-labels").setAttribute("aria-pressed", String(labels.group.visible));
+};
+$("#tool-home").onclick = () => {
+  if (!map) return;
+  const { width: W, depth: D } = map.meta;
+  controls.target.set(W / 2, 0, D / 2);
+  camera.position.set(W / 2 + W * 0.35, Math.max(W, D) * 0.45, D / 2 + D * 0.55);
+};
+$("#tool-help").onclick = () => { $("#intro").hidden = false; };
+$("#intro-ok").onclick = () => {
+  $("#intro").hidden = true;
+  try { localStorage.setItem("grid-intro", "1"); } catch {}
+  if (!heatOn) setHeat(true);
+};
+$("#tool-report").onclick = () => {
+  const open = !$("#report").classList.contains("open");
+  $("#report").classList.toggle("open", open);
+  $("#tool-report").setAttribute("aria-pressed", String(open));
+  if (open) renderReport();
+};
+$("#report-close").onclick = () => $("#tool-report").click();
+
+// 카메라를 (x, z)로 옮기고 조금 가까이
+function flyTo(x, z) {
+  focusTo = new THREE.Vector3(x, 0, z);
+  const dist = camera.position.distanceTo(controls.target);
+  if (dist > 140) camera.position.lerp(controls.target, 1 - 140 / dist);
+}
+
+// ---------------------------------------------------------------- 동네 환경 리포트
+function renderReport() {
+  if (!map || !heat || !$("#report").classList.contains("open")) return;
+  const W = map.meta.width, s = map.meta.zone_size || 40;
+  // 지금 날씨·공기
+  const w = lastEnv?.weather, a = lastEnv?.air;
+  $("#r-env").innerHTML = (w || a)
+    ? `${w?.temp != null ? `🌡️ 기온 <b>${w.temp.toFixed(1)}°C</b> · 습도 ${w.humidity ?? "-"}%<br>` : ""}${a?.pm25 != null ? `😷 초미세먼지 <b>${a.pm25}</b>㎍/㎥ (${a.pm25_grade || a.grade || "-"}) · 미세먼지 ${a.pm10 ?? "-"}<br>` : ""}<small class="hint">기상청 · 에어코리아 ${a?.station || ""}</small>`
+    : "실시간 데이터 연결 전이에요";
+  // 열섬 TOP3 (구역 평균)
+  const h = simOn ? heatSim : heat;
+  const zh = Object.entries(zoneHeat(map, h)).sort((p, q) => q[1] - p[1]).slice(0, 3);
+  $("#r-hot").innerHTML = zh.map(([zone, v], i) => {
+    const [r, g, b] = heatRGB(v);
+    return `<li data-zone="${zone}"><span class="num">${i + 1}</span>${nearestLabel(zone)}<span class="score" style="background:rgb(${r},${g},${b})">${v}</span></li>`;
+  }).join("");
+  $("#r-hot").querySelectorAll("li").forEach((li) => {
+    li.onclick = () => {
+      const z = li.dataset.zone;
+      const zx = z.charCodeAt(0) - 65, zz = parseInt(z.slice(1), 10) - 1;
+      if (!heatOn) setHeat(true, true);
+      flyTo(zx * s + s / 2, zz * s + s / 2);
+      if (innerWidth < 600) $("#tool-report").click();
+    };
+  });
+  // 시뮬레이션 요약
+  const props = proposals();
+  if (!props.length) {
+    $("#r-sim").innerHTML = `<p class="r-sim">아직 개선 제안이 없어요. 지도를 눌러 첫 제안을 해 보세요!</p>`;
+  } else {
+    const sim = simOn ? heatSim : computeHeat(map, buildMods(map, props, TYPE_BY_CODE));
+    const st = simStats(heat, sim);
+    $("#r-sim").innerHTML = `<div class="r-sim">개선 제안 <b>${props.length}건</b>이 모두 실현되면<br>
+      영향권 <b>${st.ha.toFixed(1)}ha</b>의 평균 열섬 지수<br><span class="big">${Math.round(st.before)} → ${Math.round(st.after)}</span>
+      <b style="color:#2f9e44">(−${Math.round(st.before - st.after)})</b><br>
+      3점 이상 시원해지는 곳 <b>${st.bigHa.toFixed(1)}ha</b> · 무실동 전체 평균 ${baseAvg.toFixed(1)} → ${meanHeat(sim).toFixed(1)}</div>
+      ${simOn ? "" : `<p class="hint">✨ 제안 효과 버튼을 누르면 지도에서 볼 수 있어요</p>`}`;
+  }
+  // 유형별 개수 (누르면 숨기기)
+  const counts = {};
+  for (const { data } of markers.values()) counts[data.type] = (counts[data.type] || 0) + 1;
+  const max = Math.max(1, ...Object.values(counts));
+  $("#r-types").innerHTML = TYPES.map((t) => `<button type="button" class="r-type ${hiddenTypes.has(t.code) ? "off" : ""}" data-code="${t.code}">
+      <span>${t.icon}</span><span>${t.label}</span><span class="rbar"><i style="width:${((counts[t.code] || 0) / max) * 100}%;background:${t.color}"></i></span><b>${counts[t.code] || 0}</b></button>`).join("");
+  $("#r-types").querySelectorAll(".r-type").forEach((b) => {
+    b.title = TYPE_BY_CODE[b.dataset.code].label;
+    b.onclick = () => {
+      const c = b.dataset.code;
+      hiddenTypes.has(c) ? hiddenTypes.delete(c) : hiddenTypes.add(c);
+      for (const { obj, data } of markers.values()) obj.visible = !hiddenTypes.has(data.type);
+      renderReport();
+    };
+  });
+}
 
 // 구역 코드(H1) 대신 그 구역 안 가장 중요한 이름표로 부르기
 function nearestLabel(zone) {
@@ -416,6 +594,8 @@ const AIR_COLOR = { 좋음: "#1c7ed6", 보통: "#2f9e44", 나쁨: "#f76707", 매
 async function loadEnv() {
   try {
     const d = await api("/api/env");
+    lastEnv = d;
+    renderReport();
     const w = d.weather, a = d.air;
     if (!w && !a) return;
     const parts = [];
