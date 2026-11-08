@@ -11,15 +11,49 @@ const $ = (s) => document.querySelector(s);
 
 // ---------------------------------------------------------------- 3D 기본
 const canvas = $("#view");
+const MOBILE = matchMedia("(pointer: coarse)").matches;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1.5 : 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xbfe3f5);
+scene.background = skyTexture();
 const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 2000);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x6b8f5a, 1.6));
-const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-sun.position.set(-0.6, 1, 0.35);
-scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xdfefff, 0x7a8f6a, 1.45));
+const sun = new THREE.DirectionalLight(0xfff3e0, 2.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(MOBILE ? 2048 : 4096, MOBILE ? 2048 : 4096);
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.04;
+scene.add(sun, sun.target);
+
+function skyTexture() {
+  const cv = document.createElement("canvas");
+  cv.width = 2; cv.height = 256;
+  const g = cv.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, "#7fb8e6");
+  grad.addColorStop(0.6, "#c4e2f5");
+  grad.addColorStop(1, "#eaf4f8");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 2, 256);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// 해는 남서쪽 하늘. 지도 전체를 덮도록 그림자 범위 설정
+function placeSun(W, D) {
+  const cx = W / 2, cz = D / 2, R = Math.max(W, D) * 0.75;
+  sun.target.position.set(cx, 0, cz);
+  sun.position.set(cx - R * 0.55, R * 1.1, cz + R * 0.45);
+  const cam = sun.shadow.camera;
+  cam.left = cam.bottom = -R;
+  cam.right = cam.top = R;
+  cam.near = 1;
+  cam.far = R * 4;
+  cam.updateProjectionMatrix();
+}
 
 const controls = new MapControls(camera, canvas);
 controls.enableDamping = true;
@@ -46,6 +80,7 @@ let selected = null; // { x, z }
 let chosenType = null;
 let ghost = null;
 let focusTo = null; // 카메라가 이동할 목표 지점
+const perf = { n: 0, t0: 0, done: false }; // 성능 측정
 
 const cursor = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.06, 1.06, 1.06).translate(0, 0.53, 0)),
@@ -72,7 +107,8 @@ async function start() {
   controls.maxDistance = Math.max(W, D) * 1.3;
   camera.far = Math.max(W, D) * 4;
   camera.updateProjectionMatrix();
-  scene.fog = new THREE.Fog(0xbfe3f5, Math.max(W, D) * 0.9, Math.max(W, D) * 2.2);
+  scene.fog = new THREE.Fog(0xd6ebf5, Math.max(W, D) * 0.9, Math.max(W, D) * 2.2);
+  placeSun(W, D);
   buildTypeButtons();
   await poll();
   setInterval(poll, POLL_MS);
@@ -109,8 +145,27 @@ function loop() {
     }
   }
   renderer.render(scene, camera);
+  checkPerf();
 }
 loop();
+
+// 느린 기기면 그림자를 끄고 해상도를 낮춘다 (맵이 뜬 뒤 60프레임 평균으로 판단)
+function checkPerf() {
+  if (perf.done || !map) return;
+  const now = performance.now();
+  if (perf.n === 0) perf.t0 = now;
+  if (++perf.n < 60) return;
+  perf.done = true;
+  const ms = (now - perf.t0) / 59;
+  if (ms > 40 || new URLSearchParams(location.search).has("low")) {
+    renderer.shadowMap.enabled = false;
+    sun.castShadow = false;
+    renderer.setPixelRatio(1);
+    resize();
+    scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+    console.log(`[GRID] 저사양 모드 (프레임 ${ms.toFixed(0)}ms)`);
+  }
+}
 
 // ---------------------------------------------------------------- 서버 통신
 async function api(path, opts = {}) {
