@@ -11,16 +11,19 @@ import urllib.request
 import voxelfmt as vf
 
 TEXTS = {
-    "streetlight": ["밤에 골목이 너무 어두워요", "가로등이 고장 나서 깜빡여요", "학원 끝나고 오는 길이 무서워요",
-                    "공원 산책로에 가로등이 없어요"],
-    "bench": ["버스 기다릴 때 앉을 곳이 없어요", "어르신들 쉬어갈 벤치가 필요해요", "공원에 그늘 벤치 있으면 좋겠어요"],
-    "trash": ["쓰레기가 길에 많이 버려져요", "상가 앞 쓰레기통이 항상 넘쳐요", "분리수거함이 필요해요"],
-    "tree": ["여름에 그늘이 하나도 없어요", "가로수가 말라 죽었어요", "삭막해서 나무를 더 심었으면"],
-    "walkway": ["인도가 좁아서 유모차가 못 다녀요", "보도블록이 깨져서 넘어질 뻔했어요", "횡단보도까지 너무 멀어요",
-                "비 오면 물이 고여요"],
-    "other": ["불법 주차가 너무 많아요", "자전거 거치대가 필요해요", "CCTV 설치 부탁드려요"],
+    "tree": ["여름에 그늘이 하나도 없어요", "통학로에 가로수가 있으면 좋겠어요", "버스 기다릴 때 너무 뜨거워요"],
+    "pocketpark": ["빈 주차장을 작은 숲으로 바꿔 주세요", "아이들이 놀 그늘진 공원이 없어요", "공터에 나무를 심어 주세요"],
+    "shade": ["횡단보도 앞에 그늘막이 필요해요", "정류장에 햇빛 가림막 부탁드려요", "신호 기다리다 더위 먹을 것 같아요"],
+    "coolfog": ["상가 거리에 쿨링포그 있으면 좋겠어요", "한여름 놀이터가 너무 뜨거워요"],
+    "greenroof": ["아파트 상가 옥상에 정원을 만들어 주세요", "공공건물 옥상녹화 해 주세요"],
+    "coolpave": ["보도블록이 너무 뜨거워요", "비 오면 물이 고이고 여름엔 달궈져요"],
+    "trash": ["쓰레기가 길에 많이 버려져요", "상가 앞 쓰레기통이 항상 넘쳐요"],
+    "odor": ["음식물 쓰레기 냄새가 심해요", "공사장 먼지가 심해요"],
+    "noise": ["밤늦게 공사 소음이 있어요", "오토바이 소음이 심해요"],
+    "other": ["불법 주차가 너무 많아요", "자전거 거치대가 필요해요"],
 }
-WEIGHTS = {"streetlight": 5, "walkway": 4, "trash": 3, "bench": 3, "tree": 2, "other": 1}
+WEIGHTS = {"tree": 6, "shade": 5, "pocketpark": 3, "coolfog": 2, "greenroof": 2, "coolpave": 2,
+           "trash": 3, "odor": 2, "noise": 2, "other": 1}
 
 
 def main():
@@ -33,6 +36,8 @@ def main():
     meta = doc["meta"]
     # 인도·도로·공원 칸 위주로, 몇몇 '핫스팟' 근처에 몰리게
     cand = [(x, z) for z in range(meta["depth"]) for x in range(meta["width"]) if ground[z, x] in (2, 3)]
+    b = doc["buildings"]
+    roofs = [(b[i], b[i + 1]) for i in range(0, len(b), 4)]
     hot = random.sample(cand, 4)
     types = list(WEIGHTS)
     for i in range(a.n):
@@ -43,6 +48,8 @@ def main():
         else:
             x, z = random.choice(cand)
         t = random.choices(types, weights=[WEIGHTS[k] for k in types])[0]
+        if t == "greenroof":
+            x, z = random.choice(roofs)
         lat, lng = vf.cell_to_latlng(meta, x, z)
         body = {"x": x, "z": z, "lat": lat, "lng": lng, "zone": vf.zone_of(meta, x, z),
                 "type": t, "text": random.choice(TEXTS[t])}

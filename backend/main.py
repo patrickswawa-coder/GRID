@@ -39,13 +39,22 @@ AI_ENABLED = os.getenv("AI_ENABLED", "1") == "1"
 SERVE_WEB = os.getenv("SERVE_WEB", "0") == "1"
 
 TYPES = {
-    "streetlight": "가로등",
-    "bench": "벤치",
-    "trash": "쓰레기통",
-    "tree": "가로수·녹지",
-    "walkway": "보행로 개선",
+    # 열섬 줄이기 개선 제안
+    "tree": "가로수 심기",
+    "pocketpark": "소공원·녹지",
+    "shade": "그늘막",
+    "coolfog": "쿨링포그",
+    "greenroof": "옥상녹화",
+    "coolpave": "투수·차열 포장",
+    # 환경 불편 신고
+    "trash": "쓰레기·무단투기",
+    "odor": "악취·매연",
+    "noise": "소음",
     "other": "기타",
 }
+# 예전 유형 (이미 저장된 데이터 표시용, 새 등록은 불가)
+LEGACY_TYPES = {"streetlight": "가로등", "bench": "벤치", "walkway": "보행로 개선"}
+TYPE_NAMES = {**TYPES, **LEGACY_TYPES}
 
 app = FastAPI(title="GRID API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -237,10 +246,10 @@ def ask_model(prompt: str, max_tokens: int = 512) -> str:
 def ai_classify(cid: int, ctype: str, text: str):
     """등록된 민원에 긴급도(1~3)와 한 단어 태그를 붙인다. 실패해도 조용히 넘어간다."""
     prompt = (
-        "너는 원주시 민원 분류 담당이야. 아래 시민 민원을 보고 JSON 한 줄로만 답해.\n"
+        "너는 원주시 환경 민원 분류 담당이야. 아래 시민의 환경 개선 제안·불편 신고를 보고 JSON 한 줄로만 답해.\n"
         '형식: {"urgency": 1|2|3, "tag": "두~네 글자 한국어 태그"}\n'
-        "urgency 3=안전 위험(사고·범죄·야간 어두움 등), 2=생활 불편, 1=개선 희망.\n"
-        f"유형: {TYPES.get(ctype, ctype)}\n민원: {text}"
+        "urgency 3=건강·안전 위험(폭염 취약, 심한 악취·매연 등), 2=생활 불편, 1=개선 희망.\n"
+        f"유형: {TYPE_NAMES.get(ctype, ctype)}\n민원: {text}"
     )
     try:
         raw = ask_model(prompt, 100)
@@ -266,12 +275,12 @@ def ai_summary():
         rows = conn.execute("SELECT zone, type, text, likes FROM complaints ORDER BY id DESC LIMIT 80").fetchall()
     if not rows:
         return {"summary": "아직 접수된 민원이 없습니다.", "generated_at": now_kst(), "ai": False}
-    lines = [f"- [{r['zone']}] {TYPES.get(r['type'], r['type'])}: {r['text']} (공감 {r['likes']})" for r in rows]
+    lines = [f"- [{r['zone']}] {TYPE_NAMES.get(r['type'], r['type'])}: {r['text']} (공감 {r['likes']})" for r in rows]
     data = None
     if AI_ENABLED:
         prompt = (
-            "다음은 원주시 무실동 시민들이 3D 지도에 남긴 최근 민원이야. 공무원에게 보고하듯 "
-            "한국어로 3~4문장 요약해 줘. 민원이 몰린 구역, 가장 많은 요구, 우선 검토할 항목을 포함해.\n\n"
+            "다음은 원주시 무실동 시민들이 3D 열섬 지도 위에 남긴 최근 환경 개선 제안과 불편 신고야. 공무원에게 보고하듯 "
+            "한국어로 3~4문장 요약해 줘. 제안이 몰린 구역, 가장 많은 요구(가로수·그늘막 등), 폭염·대기 관점에서 우선 검토할 항목을 포함해.\n\n"
             + "\n".join(lines)
         )
         try:
@@ -291,11 +300,11 @@ def _rule_summary() -> str:
         return "아직 접수된 민원이 없습니다."
     top_type = max(s["by_type"].items(), key=lambda kv: kv[1])
     parts = [f"총 {s['total']}건의 민원이 접수되었습니다(오늘 {s['today']}건).",
-             f"가장 많은 요청은 '{TYPES.get(top_type[0], top_type[0])}'({top_type[1]}건)입니다."]
+             f"가장 많은 요청은 '{TYPE_NAMES.get(top_type[0], top_type[0])}'({top_type[1]}건)입니다."]
     if s["top_zones"]:
         z = s["top_zones"][0]
         parts.append(f"민원이 가장 몰린 구역은 {z['zone']}({z['count']}건)이며 주로 "
-                     f"'{TYPES.get(z['top_type'], z['top_type'])}' 요청입니다.")
+                     f"'{TYPE_NAMES.get(z['top_type'], z['top_type'])}' 요청입니다.")
     return " ".join(parts)
 
 

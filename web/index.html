@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#bfe3f5">
-  <title>GRID · 우리 동네 3D 민원 지도</title>
+  <title>GRID · 우리 동네 열섬 지도</title>
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">
     { "imports": {
@@ -19,10 +19,41 @@
   <header class="bar">
     <div class="brand"><b>GRID</b><span id="place">불러오는 중…</span></div>
     <div class="right">
-      <button id="heatBtn" class="layer-btn" type="button" aria-pressed="false">🌡️ 열섬 지도</button>
       <div class="count"><span id="count">0</span>건의 제안</div>
     </div>
   </header>
+
+  <!-- 오른쪽 도구 막대 -->
+  <nav class="tools" aria-label="지도 도구">
+    <button id="tool-heat" class="tool" type="button" aria-pressed="false"><span>🌡️</span><small>열섬</small></button>
+    <button id="tool-sim" class="tool" type="button" aria-pressed="false"><span>✨</span><small>제안 효과</small></button>
+    <button id="tool-report" class="tool" type="button" aria-pressed="false"><span>📊</span><small>리포트</small></button>
+    <button id="tool-labels" class="tool" type="button" aria-pressed="true"><span>🏷️</span><small>이름표</small></button>
+    <button id="tool-home" class="tool" type="button"><span>🧭</span><small>처음 위치</small></button>
+    <button id="tool-help" class="tool" type="button"><span>❔</span><small>도움말</small></button>
+  </nav>
+
+  <!-- 동네 환경 리포트 -->
+  <aside id="report" class="report" aria-label="동네 환경 리포트">
+    <div class="report-head"><h2>📊 무실동 환경 리포트</h2><button id="report-close" class="x" type="button" aria-label="닫기">✕</button></div>
+    <section><h3>지금 날씨·공기</h3><div id="r-env" class="r-env">불러오는 중…</div></section>
+    <section><h3>🔥 열이 많이 쌓이는 곳 TOP 3</h3><ol id="r-hot" class="r-list"></ol><p class="hint">누르면 그곳으로 이동해요</p></section>
+    <section><h3>🌱 시민 제안 효과</h3><div id="r-sim"></div></section>
+    <section><h3>📢 유형별 제안·신고 <small>(눌러서 지도에서 숨기기)</small></h3><div id="r-types" class="r-types"></div></section>
+  </aside>
+
+  <!-- 첫 방문 안내 -->
+  <div id="intro" class="intro" hidden>
+    <div class="intro-card">
+      <h2>🧱 GRID · 우리 동네 열섬 지도</h2>
+      <ol>
+        <li><b>🌡️ 열섬</b> 버튼으로 무실동에서 <b>열이 많이 쌓이는 곳</b>을 확인해요.</li>
+        <li>바꾸고 싶은 곳을 <b>눌러서</b> 가로수·그늘막·쿨링포그 같은 <b>개선 블록</b>을 놓아요. 놓기 전에 <b>지수가 얼마나 내려갈지</b> 보여드려요.</li>
+        <li><b>✨ 제안 효과</b>로 시민 제안이 모두 실현되면 동네가 어떻게 바뀌는지 봐요.</li>
+      </ol>
+      <button id="intro-ok" class="primary" type="button">시작하기</button>
+    </div>
+  </div>
   <div id="envNow" class="env-now" hidden></div>
   <div id="legend" class="legend" hidden>
     <div class="legend-title">열섬 위험 지수 <small>(주변 50m 기준)</small></div>
@@ -38,15 +69,19 @@
   <section id="sheet" class="sheet" aria-label="민원 등록">
     <form id="form">
       <div class="sheet-head">
-        <h2>이 위치에 무엇이 필요할까요?</h2>
+        <h2>이 위치를 어떻게 바꿀까요?</h2>
         <span id="zone" class="chip"></span>
       </div>
       <div id="heatInfo" class="heat-info"></div>
-      <div id="types" class="types"></div>
+      <div class="types-title">🌡️ 열섬 줄이기 제안</div>
+      <div id="types-fix" class="types"></div>
+      <div class="types-title">📢 환경 불편 신고</div>
+      <div id="types-report" class="types small"></div>
+      <div id="effectInfo" class="effect-info"></div>
       <textarea id="text" maxlength="200" rows="2" placeholder="먼저 위에서 유형을 골라 주세요"></textarea>
       <div class="actions">
         <button type="button" id="cancel" class="ghost">취소</button>
-        <button type="submit" id="submit" class="primary" disabled>민원 등록</button>
+        <button type="submit" id="submit" class="primary" disabled>제안 등록</button>
       </div>
     </form>
   </section>

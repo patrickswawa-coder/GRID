@@ -15,7 +15,7 @@ import main  # noqa: E402
 
 client = TestClient(main.app)
 
-SAMPLE = {"x": 10, "z": 20, "lat": 37.34, "lng": 127.92, "zone": "a1", "type": "streetlight", "text": "밤에 너무 어두워요"}
+SAMPLE = {"x": 10, "z": 20, "lat": 37.34, "lng": 127.92, "zone": "a1", "type": "tree", "text": "여름에 그늘이 없어요"}
 
 
 def test_health():
@@ -35,12 +35,13 @@ def test_create_list_like_stats():
     assert client.post("/api/complaints/99999/like").status_code == 404
 
     s = client.get("/api/stats").json()
-    assert s["total"] >= 1 and s["by_type"]["streetlight"] >= 1
+    assert s["total"] >= 1 and s["by_type"]["tree"] >= 1
     assert s["top_zones"][0]["zone"] == "A1"
 
 
 def test_validation():
     assert client.post("/api/complaints", json={**SAMPLE, "type": "ufo"}).status_code == 400
+    assert client.post("/api/complaints", json={**SAMPLE, "type": "bench"}).status_code == 400  # 예전 유형은 새 등록 불가
     assert client.post("/api/complaints", json={**SAMPLE, "text": ""}).status_code == 422
     assert client.post("/api/complaints", json={**SAMPLE, "text": "가" * 201}).status_code == 422
 

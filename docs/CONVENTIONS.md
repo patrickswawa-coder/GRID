@@ -87,16 +87,19 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 | `ai_tag` | str \| null | AI가 붙인 한 단어 태그 (예: "야간안전") |
 | `created_at` | str | ISO 8601, 서버 시간(KST) |
 
-**민원 유형 `type` (코드 ↔ 한글)**
+**제안·신고 유형 `type`** (자세한 효과 값은 `web/js/types.js`)
 
-| 코드 | 한글 | 아이콘 |
-|---|---|---|
-| `streetlight` | 가로등 | 💡 |
-| `bench` | 벤치 | 🪑 |
-| `trash` | 쓰레기통 | 🗑️ |
-| `tree` | 가로수·녹지 | 🌳 |
-| `walkway` | 보행로 개선 | 🚶 |
-| `other` | 기타 | ❗ |
+| 구분 | 코드 | 한글 | 시뮬레이션 효과 (영향 범위) |
+|---|---|---|---|
+| 열섬 줄이기 제안 | `tree` | 🌳 가로수 심기 | 녹지 +0.6 (25m) |
+| | `pocketpark` | 🌿 소공원·녹지 | 녹지 +1, 포장 제거 (35m) |
+| | `shade` | ⛱️ 그늘막 | 포장면 열흡수 −50% (25m) |
+| | `coolfog` | 💧 쿨링포그 | 수분 +0.5 (35m) |
+| | `greenroof` | 🏠 옥상녹화 | 건물 지붕 열 −70% (45m, 옥상에만) |
+| | `coolpave` | 🧱 투수·차열 포장 | 포장면 열흡수 −60% (45m) |
+| 환경 불편 신고 | `trash` / `odor` / `noise` / `other` | 🗑️ 쓰레기 / 😷 악취·매연 / 🔊 소음 / ❗ 기타 | 없음 (데이터 수집) |
+
+예전 유형 `streetlight`, `bench`, `walkway` 는 이미 저장된 데이터 표시용으로만 남김 (새 등록 불가).
 
 유형을 추가하려면 `backend/main.py`의 `TYPES`, `web/js/types.js`, `dashboard/app.py`의 `TYPE_LABELS` 세 곳을 같이 고칩니다.
 
