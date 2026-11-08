@@ -27,7 +27,7 @@ from pyproj import Transformer
 import voxelfmt as vf
 
 METRIC = "EPSG:5186"  # 중부원점 TM (미터)
-DEFAULT_BBOX = (127.9125, 37.3260, 127.9380, 37.3455)  # 서, 남, 동, 북 (무실동 전체 + 약간의 여유)
+DEFAULT_BBOX = (127.9080, 37.3195, 127.9380, 37.3455)  # 서, 남, 동, 북 (무실동 + 남쪽 삼육고·남원주IC, 서쪽 송삼마을)
 
 FLOOR_CANDIDATES = ["A26", "GRND_FLR", "grnd_flr", "지상층수", "FLOORS", "floors"]
 HEIGHT_CANDIDATES = ["A16", "HEIGHT", "height", "높이", "BLD_HGT"]
