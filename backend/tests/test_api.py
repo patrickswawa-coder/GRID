@@ -82,3 +82,14 @@ def test_kma_grid():
     # 기상청 격자: 원주 무실동 부근은 nx 76, ny 122 근처
     nx, ny = main.envdata.latlng_to_grid(37.3355, 127.925)
     assert 74 <= nx <= 78 and 120 <= ny <= 124
+
+
+def test_priority():
+    client.post("/api/complaints", json={**SAMPLE, "x": 300, "z": 300, "type": "tree"})
+    client.post("/api/complaints", json={**SAMPLE, "x": 302, "z": 301, "type": "shade"})
+    z = client.get("/api/priority?limit=5").json()
+    assert len(z) >= 1 and z[0]["rank"] == 1 and "score" in z[0] and "name" in z[0]
+    hit = [r for r in client.get("/api/priority?limit=300").json() if r["proposals"] >= 2]
+    assert hit and hit[0]["heat_after"] <= hit[0]["heat"]
+    p = client.get("/api/ai/policy").json()
+    assert p["ai"] is False and "1위" in p["text"]
