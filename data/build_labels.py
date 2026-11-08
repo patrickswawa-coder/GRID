@@ -18,7 +18,7 @@ import shapely
 from pyproj import Transformer
 
 import voxelfmt as vf
-from build_voxels import DEFAULT_BBOX, METRIC, read
+from build_voxels import DEFAULT_BBOX, METRIC, add_missing_buildings, read
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parent / "web" / "data" / "labels.json"
@@ -38,6 +38,8 @@ RENAME = {
 
 def clean(name: str) -> str:
     name = re.sub(r"\s*(제?\d+동|[가-하A-Z]동|주건축물.*|부속.*)$", "", name.strip())
+    name = re.sub(r"^원주시\s+", "", name)
+    name = re.sub(r"\s*아파트$", "", name) if " " in name else name  # '무실 세영리첼 1차 아파트' → '무실 세영리첼 1차'
     name = re.sub(r"^원주(?=무실)", "", name)  # '원주무실1단지아파트' → '무실1단지아파트'
     name = name.strip()
     return RENAME.get(name, name)
@@ -58,6 +60,7 @@ def classify(name, use):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--buildings", required=True)
+    ap.add_argument("--extra-buildings", help="도로명주소 건물(TL_SPBD_BULD)")
     ap.add_argument("--bbox", nargs=4, type=float, default=DEFAULT_BBOX)
     ap.add_argument("--cell", type=float, default=5.0)
     ap.add_argument("--shops", type=int, default=12, help="큰 상가 몇 개까지 표시할지")
@@ -67,6 +70,8 @@ def main():
     tf = Transformer.from_crs("EPSG:4326", METRIC, always_xy=True)
     (mx0, my0), (mx1, my1) = tf.transform(w, s), tf.transform(e, n)
     g = read(a.buildings, (mx0, my0, mx1, my1))
+    if a.extra_buildings:
+        g = add_missing_buildings(g, a.extra_buildings, (mx0, my0, mx1, my1))
     g = g[g["A24"].notna()].copy()
     g["name"] = g["A24"].astype(str).map(clean)
     g = g[~g["name"].isin(GENERIC) & (g["name"].str.len() >= 2) & ~g["name"].str.match(r"^[\d\-\s]+$|^무실동 \d")]
