@@ -100,9 +100,51 @@ def kind_of(use: str) -> int:
     return vf.HOUSE
 
 
+# 연속지적도 지목(지번 끝 글자) → 바닥 종류
+JIMOK = {
+    vf.ROAD: "도철",
+    vf.WATER: "천구유",
+    vf.PARK: "공체원임묘제",
+    vf.SIDEWALK: "대학주차창장종사잡수",
+}  # 나머지(전·답·과·목 등)는 잔디
+
+
+def jimok_col(df):
+    """'295-35 대' 처럼 끝 글자가 지목인 컬럼을 찾는다."""
+    all_codes = "".join(JIMOK.values()) + "전답과목광염"
+    for c in df.columns:
+        if c == "geometry":
+            continue
+        last = df[c].astype(str).str.strip().str[-1]
+        if last.isin(list(all_codes)).mean() > 0.8:
+            return c
+    return None
+
+
+def paint_parcels(path, bbox_m, xs, ys, ground):
+    p = read(path, bbox_m)
+    col = jimok_col(p)
+    if not col:
+        print("! 지적도에서 지목 컬럼을 못 찾았어요 — 바닥은 잔디로 둡니다")
+        return
+    last = p[col].astype(str).str.strip().str[-1]
+    print(f"지적도 {len(p)}필지, 지목 컬럼={col}: " + ", ".join(f"{k}{v}" for k, v in last.value_counts().head(8).items()))
+    for val in (vf.SIDEWALK, vf.PARK, vf.WATER, vf.ROAD):  # 도로를 마지막에 칠해 끊기지 않게
+        m = last.isin(list(JIMOK[val])).to_numpy()
+        rasterize(p.geometry.to_numpy()[m], [val] * int(m.sum()), xs, ys, ground)
+    # 넓은 도로의 가장자리 한 칸은 인도로
+    road = ground == vf.ROAD
+    pad = np.pad(road, 1)
+    inner = road & pad[:-2, 1:-1] & pad[2:, 1:-1] & pad[1:-1, :-2] & pad[1:-1, 2:]
+    ip = np.pad(inner, 1)
+    near_inner = ip[:-2, 1:-1] | ip[2:, 1:-1] | ip[1:-1, :-2] | ip[1:-1, 2:]
+    ground[road & ~inner & near_inner] = vf.SIDEWALK
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--buildings", required=True)
+    ap.add_argument("--parcels", help="연속지적도 (clip_parcels.py 결과) → 도로·공원·하천·대지 바닥")
     ap.add_argument("--roads"); ap.add_argument("--parks"); ap.add_argument("--water")
     ap.add_argument("--bbox", nargs=4, type=float, default=DEFAULT_BBOX, metavar=("W", "S", "E", "N"))
     ap.add_argument("--cell", type=float, default=5.0)
@@ -144,6 +186,8 @@ def main():
     ys = my1 - (np.arange(D) + 0.5) * a.cell
 
     ground = np.full((D, W), vf.GRASS, np.uint8)
+    if a.parcels:
+        paint_parcels(a.parcels, bbox_m, xs, ys, ground)
     for path, val in ((a.parks, vf.PARK), (a.water, vf.WATER)):
         if path:
             g = read(path, bbox_m)
