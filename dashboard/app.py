@@ -5,6 +5,7 @@
 데이터는 DB를 직접 읽지 않고 백엔드 API로만 가져온다 (docs/CONVENTIONS.md 6장).
 """
 import os
+import re
 from datetime import datetime
 
 import pandas as pd
@@ -131,7 +132,8 @@ def priority_section():
     st.subheader("🏛️ AI 정책 제안")
     p = ai_policy()
     if p:
-        st.success(p["text"])
+        # AI가 # 머리글을 쓰면 글씨가 너무 커지므로 굵은 글씨 한 줄로 낮춘다
+        st.success(re.sub(r"(?m)^#{1,6}\s*(.+?)\s*#*$", r"**\1**", p["text"]))
         st.caption(("AI 분석 (Amazon Bedrock)" if p.get("ai") else "규칙 기반 제안 (AI 미연결)") + f" · {p['generated_at']}")
 
 
