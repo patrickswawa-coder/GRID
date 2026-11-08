@@ -333,9 +333,11 @@ def ai_policy():
         prompt = ("너는 원주시 기후·환경 정책 담당 주무관을 돕는 분석가야. 아래는 무실동 200m 구역별 열섬 위험 지수(0~100, 높을수록 뜨거움)와 "
                   "시민이 3D 지도에 남긴 환경 개선 제안 분석 결과야. 우선 개선 구역 3곳 각각에 대해 '왜 우선인지'와 "
                   "'구체적 사업 제안(예: 가로수 식재, 그늘막, 쿨링포그, 옥상녹화, 투수포장)'을 한 문단씩, 마지막에 한 줄 총평. "
-                  "숫자는 아래 자료에 있는 것만 쓰고, 추정 사업비나 없는 통계는 만들지 마. 한국어, 보고서 문체.\n\n" + "\n".join(lines))
+                  "숫자는 아래 자료에 있는 것만 쓰고, 추정 사업비나 없는 통계는 만들지 마. 한국어, 보고서 문체. "
+                  "문서 제목이나 # 머리글은 쓰지 말고, 각 구역은 '**1순위: 구역 이름**' 처럼 굵은 글씨 한 줄로 시작해. "
+                  "구역마다 3문장 이내로 짧게.\n\n" + "\n".join(lines))
         try:
-            data = {"text": ask_model(prompt, 700).strip(), "generated_at": now_kst(), "ai": True}
+            data = {"text": ask_model(prompt, 1500).strip(), "generated_at": now_kst(), "ai": True}
         except Exception as e:
             print(f"[ai_policy] fallback: {e}")
     if data is None:

@@ -10,13 +10,48 @@ const GROUND_COLORS = [
   0x5d9e45, // 3 공원·녹지
   0x4aa3df, // 4 물
 ];
-// 건물 종류별 [벽, 지붕, 창문]
-const KIND_STYLE = [
-  [0xfaf8f2, 0xc9c4ba, 0x8fb0c8], // 0 아파트: 흰 벽, 회색 옥상
-  [0xf0e2c8, 0xc8553d, 0x7a8fa0], // 1 단독주택: 베이지 벽, 빨간 지붕
-  [0xc9d5de, 0x8d99a3, 0x7f9fbc], // 2 상업: 회청색, 띠 창
-  [0xefd9a0, 0xd2a63a, 0x6b88a0], // 3 공공: 노란 벽
+// 건물 종류별 색 후보 { 벽[], 지붕[], 창문 }. 건물(붙어 있는 같은 높이·종류 칸 묶음)마다 하나씩 골라 씀
+const GREEN_PAINT = 0x7fa58a; // 우리나라 옥상 방수 페인트(초록)
+const KIND_PALETTE = [
+  { // 0 아파트: 흰·크림·연한 파스텔 벽
+    wall: [0xfaf8f2, 0xf4ecda, 0xe6eef4, 0xf5e4d6, 0xe8eedf, 0xf7f1e3],
+    roof: [0xc9c4ba, GREEN_PAINT, 0xbfc6c9, GREEN_PAINT],
+    glass: 0x7f9fbc,
+  },
+  { // 1 단독주택: 베이지·벽돌 벽, 빨강·회청·갈색·초록 지붕
+    wall: [0xf0e2c8, 0xe9d6b8, 0xd9b39a, 0xf3ece0, 0xe2cdb0],
+    roof: [0xc8553d, 0x5b6b7c, 0x8a5a3c, 0x5f8f6a, 0xd07a45, 0xc8553d],
+    glass: 0x7a8fa0,
+  },
+  { // 2 상가: 회청·석재·벽돌·유리, 띠 창
+    wall: [0xc9d5de, 0xe2d3b5, 0xc48a6e, 0xdcdcd8, 0xa9c7cc, 0xeadfcb],
+    roof: [0x8d99a3, GREEN_PAINT, 0xa29e96, GREEN_PAINT],
+    glass: 0x6f93b4,
+  },
+  { // 3 공공: 노란·벽돌·크림 벽
+    wall: [0xefd9a0, 0xcf9a78, 0xeee3c8],
+    roof: [0xd2a63a, GREEN_PAINT, 0x9a8f80],
+    glass: 0x6b88a0,
+  },
 ];
+
+// 붙어 있는 같은 종류·같은 높이 칸을 한 건물로 묶어 건물 번호를 매긴다 (색이 칸마다 튀지 않게)
+function buildingIds(map) {
+  const { width: W } = map.meta;
+  const b = map.buildings, n = b.length / 4;
+  const at = new Map();
+  for (let k = 0; k < n; k++) at.set(b[k * 4 + 1] * W + b[k * 4], k);
+  const parent = new Int32Array(n).map((_, i) => i);
+  const find = (i) => { while (parent[i] !== i) i = parent[i] = parent[parent[i]]; return i; };
+  for (let k = 0; k < n; k++) {
+    const x = b[k * 4], z = b[k * 4 + 1], h = b[k * 4 + 2], kind = b[k * 4 + 3];
+    for (const j of [at.get(z * W + x + 1), at.get((z + 1) * W + x)]) {
+      if (j === undefined || b[j * 4 + 2] !== h || b[j * 4 + 3] !== kind) continue;
+      parent[find(j)] = find(k);
+    }
+  }
+  return Int32Array.from({ length: n }, (_, k) => find(k));
+}
 
 export async function loadMap(url) {
   const res = await fetch(url);
@@ -127,7 +162,7 @@ function buildingMaterial() {
           float win = wx * wy * step(0.25, v) * step(v, top - 0.18);
           float far = smoothstep(0.25, 0.7, fwidth(fl));                                // 멀면 평균색으로
           vec3 wall = mix(vWall, vGlass, win);
-          wall = mix(wall, mix(vWall, vGlass, 0.14), far * step(0.25, v) * step(v, top - 0.18));
+          wall = mix(wall, mix(vWall, vGlass, 0.24), far * step(0.25, v) * step(v, top - 0.18));
           // 건물 꼭대기 띠(난간)
           wall = mix(wall, vRoof * 1.05, step(top - 0.08, v));
           // 땅에 가까울수록 어둡게 (간이 앰비언트 오클루전)
@@ -197,16 +232,20 @@ export function buildScene(map) {
     orig(shader);
   })(mesh.material.onBeforeCompile);
   const m = new THREE.Matrix4();
+  const ids = buildingIds(map);
   for (let i = 0, k = 0; i < b.length; i += 4, k++) {
     const [x, z, h, kind] = [b[i], b[i + 1], b[i + 2], b[i + 3]];
     m.makeScale(1, h, 1).setPosition(x + 0.5, 0, z + 0.5);
     mesh.setMatrixAt(k, m);
-    const [wall, roof, glass] = KIND_STYLE[kind] ?? KIND_STYLE[0];
-    // 같은 건물 안에서는 비슷하게, 건물마다 조금씩 다른 색
-    const v = (hash(x >> 2, z >> 2) - 0.5) * 0.06;
+    const pal = KIND_PALETTE[kind] ?? KIND_PALETTE[0];
+    // 건물 번호로 색을 골라 같은 건물은 같은 색, 건물마다 다른 색
+    const r = ids[k], bx = b[r * 4], bz = b[r * 4 + 1];
+    const wall = pal.wall[Math.floor(hash(bx, bz, 11) * pal.wall.length)];
+    const roof = pal.roof[Math.floor(hash(bx, bz, 12) * pal.roof.length)];
+    const v = (hash(bx, bz, 13) - 0.5) * 0.05;
     c.setHex(wall).offsetHSL(0, 0, v).toArray(aWall, k * 3);
     c.setHex(roof).offsetHSL(0, 0, v).toArray(aRoof, k * 3);
-    c.setHex(glass).toArray(aGlass, k * 3);
+    c.setHex(pal.glass).toArray(aGlass, k * 3);
     aInfo[k * 2] = kind;
     aInfo[k * 2 + 1] = h;
   }
