@@ -3,3 +3,11 @@
 __pycache__/
 .env
 *.log
+*.db
+*.db-wal
+*.db-shm
+data/raw/
+data/qr.png
+node_modules/
+.pytest_cache/
+.DS_Store

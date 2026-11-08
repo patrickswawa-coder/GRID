@@ -1,16 +1,61 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><title>GRID 7조</title></head>
-<body style="font-family:sans-serif;max-width:640px;margin:40px auto">
-  <h1>GRID 7조 서버 작동 중</h1>
-  <input id="q" style="width:70%" value="원주 무실동의 여름 열섬 현상을 한 문장으로 설명해줘">
-  <button onclick="ask()">AI에게 묻기</button>
-  <p id="a"></p>
-  <script>
-    async function ask() {
-      document.getElementById("a").textContent = "생각 중...";
-      const r = await fetch("/api/ai/explain", {method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({text: document.getElementById("q").value})});
-      document.getElementById("a").textContent = (await r.json()).answer;
-    }
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#bfe3f5">
+  <title>GRID · 우리 동네 3D 민원 지도</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": {
+        "three": "./vendor/three.module.min.js",
+        "three/addons/": "./vendor/addons/"
+    } }
   </script>
-</body></html>
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <header class="bar">
+    <div class="brand"><b>GRID</b><span id="place">불러오는 중…</span></div>
+    <div class="count"><span id="count">0</span>건의 제안</div>
+  </header>
+  <div id="offline" class="offline" hidden>서버와 연결이 끊겼어요. 다시 시도하는 중…</div>
+
+  <div id="loading" class="loading"><div class="spinner"></div><p>무실동을 블록으로 쌓는 중…</p></div>
+
+  <!-- 민원 등록 시트 -->
+  <section id="sheet" class="sheet" aria-label="민원 등록">
+    <form id="form">
+      <div class="sheet-head">
+        <h2>이 위치에 무엇이 필요할까요?</h2>
+        <span id="zone" class="chip"></span>
+      </div>
+      <div id="types" class="types"></div>
+      <textarea id="text" maxlength="200" rows="2" placeholder="먼저 위에서 유형을 골라 주세요"></textarea>
+      <div class="actions">
+        <button type="button" id="cancel" class="ghost">취소</button>
+        <button type="submit" id="submit" class="primary" disabled>민원 등록</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- 민원 상세 카드 -->
+  <section id="detail" class="sheet detail" aria-label="민원 보기">
+    <div class="sheet-head">
+      <h2 id="d-type"></h2>
+      <span id="d-zone" class="chip"></span>
+    </div>
+    <p id="d-text" class="d-text"></p>
+    <div class="actions">
+      <small id="d-time" class="muted"></small>
+      <button type="button" id="d-close" class="ghost">닫기</button>
+      <button type="button" id="d-like" class="primary">👍 공감</button>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

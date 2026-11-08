@@ -1,0 +1,5 @@
+numpy
+geopandas
+shapely>=2
+pyproj
+qrcode[pil]
