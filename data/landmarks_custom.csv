@@ -1,0 +1,4 @@
+# 자동으로 안 잡히는 장소를 직접 추가 (위도·경도는 카카오맵/네이버지도에서 우클릭 → 좌표 복사)
+# kind: apt / school / public / shop / transit
+# 예) 롯데시네마 원주무실,37.3xxxx,127.92xxxx,shop
+name,lat,lng,kind
