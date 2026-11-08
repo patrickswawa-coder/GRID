@@ -4,8 +4,10 @@
 환경변수 GRID_API (기본 http://127.0.0.1:8000) 로 백엔드 주소를 바꿀 수 있다.
 데이터는 DB를 직접 읽지 않고 백엔드 API로만 가져온다 (docs/CONVENTIONS.md 6장).
 """
+import json
 import os
 import re
+from pathlib import Path
 from datetime import datetime
 
 import pandas as pd
@@ -13,8 +15,12 @@ import plotly.express as px
 import pydeck as pdk
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 API = os.getenv("GRID_API", "http://127.0.0.1:8000")
+NAVER_KEY = os.getenv("NAVER_MAP_KEY", "")  # 네이버 클라우드 Maps Client ID. 없으면 기본(pydeck) 지도
+STATIC_DIR = Path(__file__).parent / "static"  # .streamlit/config.toml 의 enableStaticServing 으로 /app/static/ 에 서빙
+ZONE_M = 200  # 구역 한 변 (meta.zone_size 40칸 × 5m)
 REFRESH_SEC = 10
 
 TYPE_LABELS = {
@@ -66,6 +72,19 @@ def heat_rgb(v):
     return list(HEAT_STOPS[-1][1])
 
 
+def naver_zone_map(mp, height=380):
+    """네이버 지도 위에 200m 구역을 열섬 색 칸으로 그린다. 키는 환경변수 NAVER_MAP_KEY 로만 받는다.
+    srcdoc iframe은 네이버 인증에서 거절되므로 static/naver_map.html 을 실제 주소로 띄운다."""
+    zones = [{"lat": round(float(r.lat), 6), "lng": round(float(r.lng), 6), "c": "rgb({},{},{})".format(*r.color),
+              "rank": int(r.rank), "name": str(r.name), "score": round(float(r.score)),
+              "heat": round(float(r.heat_p90)), "demand": float(r.demand),
+              "p": int(r.proposals), "rp": int(r.reports), "lk": int(r.likes)} for r in mp.itertuples()]
+    cfg = {"key": NAVER_KEY, "half": ZONE_M / 2, "zones": zones}
+    # 네이버 인증은 페이지 주소 전체를 보내므로 주소는 짧게: 데이터는 같은 폴더 JSON 파일로 넘긴다
+    (STATIC_DIR / "naver_zones.json").write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    components.iframe("app/static/naver_map.html", height=height)
+
+
 def priority_section():
     """열섬 지수(서버 계산) × 시민 제안·신고·공감 → 우선 개선 구역"""
     try:
@@ -99,14 +118,19 @@ def priority_section():
         pr["demand"] = pr["proposals"] + pr["reports"] + pr["likes"] / 2
         pr["elev"] = 15 + pr["demand"] * 25
         mp = pr[(pr["built"] > 0.02) | (pr["demand"] > 0)]
-        view = pdk.ViewState(latitude=mp["lat"].mean(), longitude=mp["lng"].mean(), zoom=13.4, pitch=45, bearing=-10)
-        layer = pdk.Layer("ColumnLayer", mp, get_position="[lng, lat]", get_elevation="elev", elevation_scale=1,
-                          radius=70, get_fill_color="color", pickable=True, auto_highlight=True, extruded=True,
-                          coverage=0.9)
-        st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view, map_style="light",
-                                 tooltip={"text": "{rank}위 {name}\n점수 {score} · 열섬 {heat_p90}\n제안 {proposals} · 신고 {reports} · 공감 {likes}"}),
-                        height=380)
-        st.caption("기둥 색 = 열섬 지수(초록→빨강), 기둥 높이 = 시민 요구")
+        if NAVER_KEY and st.toggle("네이버 지도로 보기", value=True, key="naver",
+                                   help="네이버 지도가 안 뜨면 끄세요. 기본 지도로 돌아가요."):
+            naver_zone_map(mp)
+            st.caption("칸 색 = 열섬 지수(초록→빨강), 테두리 굵기 = 시민 요구 · 오른쪽 위에서 위성 지도로 바꿀 수 있어요")
+        else:
+            view = pdk.ViewState(latitude=mp["lat"].mean(), longitude=mp["lng"].mean(), zoom=13.4, pitch=45, bearing=-10)
+            layer = pdk.Layer("ColumnLayer", mp, get_position="[lng, lat]", get_elevation="elev", elevation_scale=1,
+                              radius=70, get_fill_color="color", pickable=True, auto_highlight=True, extruded=True,
+                              coverage=0.9)
+            st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view, map_style="light",
+                                     tooltip={"text": "{rank}위 {name}\n점수 {score} · 열섬 {heat_p90}\n제안 {proposals} · 신고 {reports} · 공감 {likes}"}),
+                            height=380)
+            st.caption("기둥 색 = 열섬 지수(초록→빨강), 기둥 높이 = 시민 요구")
     with right:
         q = pr[pr["built"] > 0.02]
         fig = px.scatter(q, x="heat_p90", y="demand", size=q["score"].clip(lower=5), color="heat_p90",

@@ -1,0 +1,3 @@
+# 대시보드 네이버 지도(dashboard/static/naver_map.html)를 /app/static/ 주소로 서빙
+[server]
+enableStaticServing = true
