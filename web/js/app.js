@@ -15,7 +15,10 @@ const $ = (s) => document.querySelector(s);
 const canvas = $("#view");
 const MOBILE = matchMedia("(pointer: coarse)").matches;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1.5 : 2));
+// 화질: 기본은 기기 해상도의 최대 2배 (아이폰 3배 화면도 2배면 충분히 선명). ?hd 면 기기 최대, ?low 면 1배
+const QS = new URLSearchParams(location.search);
+const MAX_DPR = QS.has("hd") ? devicePixelRatio : QS.has("low") ? 1 : Math.min(devicePixelRatio, 2);
+renderer.setPixelRatio(MAX_DPR);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
@@ -176,22 +179,34 @@ function loop() {
 }
 loop();
 
-// 느린 기기면 그림자를 끄고 해상도를 낮춘다 (맵이 뜬 뒤 60프레임 평균으로 판단)
+// 느린 기기 대응: 처음 1초(셰이더 준비 등)는 건너뛰고 그다음 60프레임을 잰다.
+// 느리면 한 단계씩만 낮춘다: ① 그림자 끄기 → ② 해상도 1.5배 → ③ 1배. (예전처럼 바로 1배로 떨어뜨리지 않음)
 function checkPerf() {
   if (perf.done || !map) return;
   const now = performance.now();
-  if (perf.n === 0) perf.t0 = now;
-  if (++perf.n < 60) return;
-  perf.done = true;
-  const ms = (now - perf.t0) / 59;
-  if (ms > 40 || new URLSearchParams(location.search).has("low")) {
+  perf.n++;
+  if (perf.n === 60) { perf.t0 = now; return; }  // 워밍업 60프레임 무시
+  if (perf.n < 120) return;
+  const ms = (now - perf.t0) / 60;
+  perf.n = 0;
+  const step = perf.step || 0;
+  if (QS.has("low") && step === 0) return lower(0, ms);
+  if (ms <= 34 || QS.has("hd")) { perf.done = true; return; }   // 30fps 이상이면 그대로
+  if (!lower(step, ms)) perf.done = true;
+}
+function lower(step, ms) {
+  perf.step = step + 1;
+  if (step === 0) {
     renderer.shadowMap.enabled = false;
     sun.castShadow = false;
-    renderer.setPixelRatio(1);
-    resize();
     scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
-    console.log(`[GRID] 저사양 모드 (프레임 ${ms.toFixed(0)}ms)`);
-  }
+  } else if (step === 1 && renderer.getPixelRatio() > 1.5) {
+    renderer.setPixelRatio(1.5); resize();
+  } else if (step <= 2 && renderer.getPixelRatio() > 1) {
+    renderer.setPixelRatio(1); resize();
+  } else return false;
+  console.log(`[GRID] 화질 ${perf.step}단계 낮춤 (프레임 ${ms.toFixed(0)}ms)`);
+  return true;
 }
 
 // ---------------------------------------------------------------- 서버 통신

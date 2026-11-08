@@ -95,20 +95,20 @@ const MODELS = {
 const iconCache = new Map();
 function iconTexture(icon, color) {
   if (iconCache.has(icon)) return iconCache.get(icon);
-  const s = 128, cv = document.createElement("canvas");
+  const s = 256, cv = document.createElement("canvas"); // 고해상도 화면용 2배
   cv.width = cv.height = s;
   const ctx = cv.getContext("2d");
   ctx.fillStyle = "#fff";
   ctx.strokeStyle = color;
-  ctx.lineWidth = 10;
+  ctx.lineWidth = 20;
   ctx.beginPath();
-  ctx.arc(s / 2, s / 2, s / 2 - 8, 0, Math.PI * 2);
+  ctx.arc(s / 2, s / 2, s / 2 - 16, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  ctx.font = "64px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif";
+  ctx.font = "128px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(icon, s / 2, s / 2 + 4);
+  ctx.fillText(icon, s / 2, s / 2 + 8);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   iconCache.set(icon, t);
