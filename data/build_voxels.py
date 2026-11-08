@@ -87,6 +87,28 @@ def rasterize(geoms, values, xs, ys, out):
         out[j0:j1, i0:i1][mask] = val
 
 
+# 도로명주소 건물 용도코드 앞 두 자리 → kind_of 가 알아듣는 용도명
+JUSO_USE = {"01": "단독주택", "02": "공동주택", "05": "문화및집회시설", "09": "의료시설", "10": "교육연구시설", "11": "노유자시설"}
+
+
+def add_missing_buildings(bld, path, bbox_m):
+    """도로명주소 건물(TL_SPBD_BULD)에서 GIS건물통합정보에 없는 건물만 골라 같은 컬럼 형식으로 붙인다."""
+    j = read(path, bbox_m)
+    base = shapely.union_all(bld.geometry.to_numpy()) if len(bld) else None
+    if base is not None:
+        overlap = j.geometry.intersection(base).area / j.area.where(j.area > 0, 1)
+        j = j[overlap < 0.3]
+    floors = gpd.pd.to_numeric(j.get("GRO_FLO_CO"), errors="coerce").fillna(0)
+    extra = gpd.GeoDataFrame({
+        "A26": floors.where(floors > 0, 2),
+        "A16": 0.0,
+        "A9": j["BDTYP_CD"].astype(str).str[:2].map(JUSO_USE).fillna("근린생활시설"),
+        "A24": j.get("BULD_NM"),
+    }, geometry=j.geometry.values, crs=j.crs)
+    print(f"도로명주소 건물에서 빠진 건물 {len(extra)}동 추가")
+    return gpd.pd.concat([bld, extra], ignore_index=True)
+
+
 def kind_of(use: str) -> int:
     use = str(use or "")
     if any(k in use for k in ("아파트", "공동주택", "연립", "다세대")):
@@ -144,6 +166,7 @@ def paint_parcels(path, bbox_m, xs, ys, ground):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--buildings", required=True)
+    ap.add_argument("--extra-buildings", help="도로명주소 건물(TL_SPBD_BULD) → 빠진 건물 채우기")
     ap.add_argument("--parcels", help="연속지적도 (clip_parcels.py 결과) → 도로·공원·하천·대지 바닥")
     ap.add_argument("--roads"); ap.add_argument("--parks"); ap.add_argument("--water")
     ap.add_argument("--bbox", nargs=4, type=float, default=DEFAULT_BBOX, metavar=("W", "S", "E", "N"))
@@ -161,6 +184,8 @@ def main():
     bbox_m = (mx0, my0, mx1, my1)
 
     bld = read(a.buildings, bbox_m)
+    if a.extra_buildings and not a.inspect:
+        bld = add_missing_buildings(bld, a.extra_buildings, bbox_m)
     if a.inspect:
         print(bld.drop(columns="geometry").head(5).T.to_string())
         return
