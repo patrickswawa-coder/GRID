@@ -2,3 +2,4 @@
 # kind: apt / school / public / shop / transit / park
 # 예) 롯데시네마 원주무실,37.3xxxx,127.92xxxx,shop
 name,lat,lng,kind
+원주교도소 이전 부지,37.34029,127.92793,public
