@@ -65,7 +65,7 @@ streamlit run dashboard/app.py
 | AI 긴급도 분류 / 요약 (Bedrock) | ✅ 코드 있음 — 서버에서 모델 ID 확인 필요. AI 없으면 통계 요약으로 대체 |
 | Streamlit 대시보드 | ✅ 지표·히트맵·유형/구역 통계·AI 요약·CSV |
 | 실제 무실동 맵 변환기 | ✅ 코드 있음 — SHP 받아서 실행 필요 |
-| 서버 배포 (nginx, systemd) | 📝 `deploy/` 예시 파일 |
+| 서버 배포 (7조 서버 32.190.9.9) | 📝 `deploy/README.md` — 접속 후 한 줄로 설정 |
 | QR 코드 | 📝 `python data/make_qr.py https://서버주소/` |
 
 ## 서버 배포
