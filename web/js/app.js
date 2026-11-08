@@ -110,6 +110,8 @@ async function start() {
   $("#heatAvg").textContent = avg;
   $("#heatTop").textContent = `${nearestLabel(zh[0][0])} (${zh[0][1]})`;
   if (new URLSearchParams(location.search).has("heat")) setHeat(true);
+  loadEnv();
+  setInterval(loadEnv, 10 * 60 * 1000);
   const { width: W, depth: D } = map.meta;
   $("#place").textContent = map.meta.name;
   controls.target.set(W / 2, 0, D / 2);
@@ -301,11 +303,13 @@ function liftView(sheetEl) {
 }
 function openSheet() {
   $("#sheet").classList.add("open");
+  document.body.classList.add("sheet-open");
   liftView($("#sheet"));
   focusTo = new THREE.Vector3(selected.x + 0.5, 0, selected.z + 0.5);
 }
 function closeSheet() {
   $("#sheet").classList.remove("open");
+  document.body.classList.remove("sheet-open");
   liftView(null);
   cursor.visible = false;
   if (ghost) markerRoot.remove(ghost);
@@ -405,6 +409,25 @@ function heatHTML(x, z) {
   const v = Math.round(heat.value[z * map.meta.width + x]);
   const lv = heatLevel(v);
   return `🌡️ 이 주변 열섬 지수 <b>${v}</b><span class="heat-badge" style="background:${lv.color}">${lv.text}</span>`;
+}
+
+// ---------------------------------------------------------------- 실시간 기온·대기질 (에어코리아·기상청)
+const AIR_COLOR = { 좋음: "#1c7ed6", 보통: "#2f9e44", 나쁨: "#f76707", 매우나쁨: "#e03131" };
+async function loadEnv() {
+  try {
+    const d = await api("/api/env");
+    const w = d.weather, a = d.air;
+    if (!w && !a) return;
+    const parts = [];
+    if (w && w.temp != null) parts.push(`🌡️ <b>${w.temp.toFixed(1)}°C</b> <small>습도 ${w.humidity ?? "-"}%</small>`);
+    if (a && a.pm25 != null) {
+      const g = a.pm25_grade || a.grade || "";
+      parts.push(`<span class="env-dot" style="background:${AIR_COLOR[g] || "#868e96"}"></span>초미세먼지 <b>${a.pm25}</b> <small>${g}</small>`);
+    }
+    const src = [w && "기상청", a && `에어코리아 ${a.station}`].filter(Boolean).join(" · ");
+    $("#envNow").innerHTML = `${parts.join("<br>")}<br><small>지금 무실동 · ${src}</small>`;
+    $("#envNow").hidden = false;
+  } catch {}
 }
 
 // ---------------------------------------------------------------- 토스트

@@ -19,6 +19,19 @@ from pydantic import BaseModel, Field
 
 KST = timezone(timedelta(hours=9))
 BASE = Path(__file__).resolve().parent
+
+
+def _load_dotenv(path: Path):
+    """레포 맨 위 .env 의 KEY=VALUE 를 환경변수로 (이미 있는 값은 덮어쓰지 않음)."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
+
+_load_dotenv(BASE.parent / ".env")
 DB_PATH = os.getenv("GRID_DB", str(BASE / "grid.db"))
 MODEL_ID = os.getenv("MODEL_ID", "global.anthropic.claude-haiku-4-5-20251001-v1:0")  # 7조 서버 안내 기준 추천 모델
 AI_ENABLED = os.getenv("AI_ENABLED", "1") == "1"
@@ -55,6 +68,10 @@ CREATE TABLE IF NOT EXISTS complaints (
     created_at  TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_complaints_zone ON complaints(zone);
+CREATE TABLE IF NOT EXISTS env_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT NOT NULL, temp REAL, humidity REAL, pm10 REAL, pm25 REAL, o3 REAL, station TEXT
+);
 """
 
 _db_lock = threading.Lock()
@@ -78,6 +95,11 @@ def init_db():
 
 
 init_db()
+
+import envdata  # noqa: E402  실시간 대기질·기온 (/api/env)
+
+envdata._db = db
+app.include_router(envdata.router)
 
 
 def row_to_dict(row: sqlite3.Row) -> dict:

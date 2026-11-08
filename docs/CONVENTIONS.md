@@ -113,6 +113,8 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 | GET | `/api/stats` | `{total, by_type:{}, by_zone:{}, top_zones:[{zone,count,top_type}], today}` |
 | GET | `/api/ai/summary` | `{summary, generated_at, ai:true/false}` 최근 민원 요약 (5분 캐시) |
 | POST | `/api/ai/explain` | (기존) `{text}` → `{answer}` |
+| GET | `/api/env` | 실시간 `{air:{station,pm10,pm25,o3,grade,pm25_grade}, weather:{temp,humidity,wind}, updated_at, errors}` (10분 캐시, 에어코리아·기상청) |
+| GET | `/api/env/history?hours=48` | `/api/env` 호출 기록 (대시보드 추이) |
 
 에러는 FastAPI 기본 형식 `{"detail": "..."}` 을 씁니다.
 
