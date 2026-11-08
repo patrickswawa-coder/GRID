@@ -62,7 +62,7 @@ def test_env_with_mocked_apis(monkeypatch):
     main.envdata._cache.update(at=0, data=None)
     air = {"response": {"body": {"items": [
         {"stationName": "춘천", "pm10Value": "10"},
-        {"stationName": "명륜동", "dataTime": "2026-11-09 01:00", "pm10Value": "32", "pm25Value": "18",
+        {"stationName": "반곡동(명륜동)", "dataTime": "2026-11-09 01:00", "pm10Value": "32", "pm25Value": "18",
          "o3Value": "0.021", "no2Value": "0.012", "khaiValue": "55", "khaiGrade": "2", "pm25Grade1h": "2"}]}}}
     kma = {"response": {"body": {"items": {"item": [
         {"category": "T1H", "obsrValue": "6.3"}, {"category": "REH", "obsrValue": "71"}, {"category": "WSD", "obsrValue": "1.2"}]}}}}
@@ -72,7 +72,7 @@ def test_env_with_mocked_apis(monkeypatch):
 
     monkeypatch.setattr(main.envdata, "_get_json", fake)
     d = client.get("/api/env").json()
-    assert d["air"]["station"] == "명륜동" and d["air"]["pm25"] == 18 and d["air"]["grade"] == "보통"
+    assert d["air"]["station"] == "반곡동(명륜동)" and d["air"]["pm25"] == 18 and d["air"]["grade"] == "보통"
     assert d["weather"]["temp"] == 6.3 and d["weather"]["humidity"] == 71
     assert len(client.get("/api/env/history").json()) >= 1
 

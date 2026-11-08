@@ -21,7 +21,7 @@ router = APIRouter()
 # 무실동 중심 (원주시청 남쪽)
 LAT, LNG = 37.3355, 127.9250
 # 에어코리아 강원 측정소 중 무실동에서 가까운 순서로 시도 (AIR_STATION 으로 지정 가능)
-STATION_PREF = ["명륜동", "중앙동", "단구동", "반곡동", "태장동", "문막읍"]
+STATION_PREF = ["반곡동(명륜동)", "중앙동(강원)", "지정면", "문막읍"]  # 실제 에어코리아 측정소 이름 (괄호 포함)
 
 AIR_URL = "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty"
 KMA_URL = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst"
