@@ -1,0 +1,15 @@
+[Unit]
+Description=GRID API (FastAPI)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/GRID/backend
+Environment=GRID_DB=/home/ubuntu/GRID/backend/grid.db
+Environment=AI_ENABLED=1
+# Environment=MODEL_ID=여기에_Bedrock_모델ID
+ExecStart=/home/ubuntu/GRID/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
