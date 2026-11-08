@@ -212,3 +212,20 @@ body.sheet-open .tools { display: none; }
   .env-now { right: 8px; bottom: calc(env(safe-area-inset-bottom) + 66px); }
   .types { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ---- 실시간 열섬 지수 읽기 (마우스 위치 / 폰은 화면 가운데) */
+.probe {
+  position: fixed; z-index: 6; pointer-events: none; transform: translate(14px, 14px);
+  background: rgba(255,255,255,.96); border-radius: 12px; padding: 7px 11px; font-size: 13px; line-height: 1.45;
+  box-shadow: 0 3px 14px rgba(0,0,0,.18); border-left: 6px solid #ccc; white-space: nowrap;
+}
+.probe .v { font-size: 22px; font-weight: 800; vertical-align: -2px; margin-right: 4px; }
+.probe .lv { font-weight: 700; }
+.probe small { color: var(--muted); }
+.crosshair {
+  position: fixed; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; z-index: 6; pointer-events: none;
+  border: 2.5px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(0,0,0,.45), inset 0 0 0 1.5px rgba(0,0,0,.45);
+}
+.crosshair::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
+.probe.center { left: 50% !important; top: 50% !important; transform: translate(-50%, 22px); text-align: center; }
+body.sheet-open .probe, body.sheet-open .crosshair { display: none; }
