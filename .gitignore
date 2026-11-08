@@ -7,6 +7,15 @@ __pycache__/
 *.db-wal
 *.db-shm
 data/raw/
+# 원본 공간데이터는 용량이 커서 절대 커밋하지 않음
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.fix
+*.gpkg
+*.zip
 data/qr.png
 node_modules/
 .pytest_cache/

@@ -35,12 +35,22 @@ USE_CANDIDATES = ["A9", "MAIN_PURPS", "주용도", "용도", "BDTYP_NM"]
 
 
 def read(path, bbox_m):
+    """범위(bbox) 안의 도형만 읽는다. 시·도 전체 파일(1GB 이상)도 메모리 걱정 없이 처리."""
+    import pyogrio
+
+    src_crs = pyogrio.read_info(path).get("crs") or METRIC
+    box = shapely.box(*bbox_m)
+    if src_crs != METRIC:
+        box = gpd.GeoSeries([box], crs=METRIC).to_crs(src_crs).iloc[0]
+    g = None
     for enc in ("cp949", "utf-8", None):
         try:
-            g = gpd.read_file(path, encoding=enc) if enc else gpd.read_file(path)
+            g = gpd.read_file(path, bbox=box.bounds, encoding=enc) if enc else gpd.read_file(path, bbox=box.bounds)
             break
-        except Exception:
-            continue
+        except Exception as e:
+            err = e
+    if g is None:
+        raise SystemExit(f"{path} 를 읽지 못했어요: {err}")
     if g.crs is None:
         print(f"! {path}: 좌표계 정보(.prj)가 없어 EPSG:5186 으로 가정합니다")
         g = g.set_crs(METRIC)
