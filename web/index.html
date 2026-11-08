@@ -18,8 +18,17 @@
 
   <header class="bar">
     <div class="brand"><b>GRID</b><span id="place">불러오는 중…</span></div>
-    <div class="count"><span id="count">0</span>건의 제안</div>
+    <div class="right">
+      <button id="heatBtn" class="layer-btn" type="button" aria-pressed="false">🌡️ 열섬 지도</button>
+      <div class="count"><span id="count">0</span>건의 제안</div>
+    </div>
   </header>
+  <div id="legend" class="legend" hidden>
+    <div class="legend-title">열섬 위험 지수 <small>(주변 50m 기준)</small></div>
+    <div class="legend-bar"></div>
+    <div class="legend-scale"><span>0 시원함</span><span>50</span><span>100 뜨거움</span></div>
+    <p class="legend-note">포장면·건물이 많을수록 ↑, 녹지·물이 많을수록 ↓<br>무실동 평균 <b id="heatAvg">-</b> · 가장 높은 구역 <b id="heatTop">-</b></p>
+  </div>
   <div id="offline" class="offline" hidden>서버와 연결이 끊겼어요. 다시 시도하는 중…</div>
 
   <div id="loading" class="loading"><div class="spinner"></div><p>무실동을 블록으로 쌓는 중…</p></div>
@@ -31,6 +40,7 @@
         <h2>이 위치에 무엇이 필요할까요?</h2>
         <span id="zone" class="chip"></span>
       </div>
+      <div id="heatInfo" class="heat-info"></div>
       <div id="types" class="types"></div>
       <textarea id="text" maxlength="200" rows="2" placeholder="먼저 위에서 유형을 골라 주세요"></textarea>
       <div class="actions">
@@ -46,6 +56,7 @@
       <h2 id="d-type"></h2>
       <span id="d-zone" class="chip"></span>
     </div>
+    <div id="d-heat" class="heat-info"></div>
     <p id="d-text" class="d-text"></p>
     <div class="actions">
       <small id="d-time" class="muted"></small>

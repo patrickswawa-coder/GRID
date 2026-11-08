@@ -222,7 +222,8 @@ export function buildScene(map) {
 
   group.add(buildTrees(map));
 
-  return { group, ground, buildings: mesh };
+  // 열섬 레이어(heat.js)가 색을 바꿨다 되돌릴 수 있게 원본을 같이 넘긴다
+  return { group, ground, buildings: mesh, groundTex, groundBase: tex.slice(), roofBase: aRoof.slice() };
 }
 
 // 공원·임야에는 숲, 도로변 인도에는 가로수
