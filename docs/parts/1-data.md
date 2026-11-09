@@ -15,7 +15,7 @@ python data/build_voxels.py --buildings data/raw/muksil_buildings.gpkg --extra-b
 python data/build_labels.py --buildings data/raw/muksil_buildings.gpkg --extra-buildings data/raw/muksil_juso_buildings.gpkg   # 공원 이름은 data/raw/parks.csv(전국도시공원정보표준데이터)가 있으면 자동   # 이름표 (직접 추가: data/landmarks_custom.csv)
 ```
 - 건물: 층수 A26, 높이 A16, 용도 A9 / 지적도: 지목은 A5 끝 글자(대·도·임·공·천…)
-- 범위: 127.9080~127.9380, 37.3195~37.3455 (무실동 + 대성고·삼육고·남원주IC·송삼마을), 5m 격자 527×583
+- 범위: 127.9080~127.9380, 37.3186~37.3455 (무실동 + 대성고·삼육고·남원주IC·송삼마을·호반써밋 원주역), 5m 격자 526×603. 층수가 비어 있는 새 건물은 `data/height_custom.csv`
 
 ## 할 일
 - [x] **11/8** V-World(vworld.kr) 회원가입 → 인증키 신청 (서비스 URL에 서버 주소 입력)
