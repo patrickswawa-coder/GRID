@@ -213,3 +213,25 @@ def test_text_optional():
     # 거리에서 QR로 들어온 시민이 유형만 골라 등록하는 경우
     r = client.post("/api/complaints", json={**SAMPLE, "x": 77, "z": 88, "text": "  "})
     assert r.status_code == 201 and r.json()["text"] == "가로수 심기 요청"
+
+
+def test_path_freehand():
+    import heatmodel
+    pts = [[100, 300], [100, 310], [112, 310]]  # ㄱ자 길
+    r = client.post("/api/complaints", json={**SAMPLE, "x": 100, "z": 300, "shape": "path", "points": pts, "text": "골목 따라 가로수"})
+    assert r.status_code == 201
+    c = r.json()
+    assert c["points"] == pts and (c["x2"], c["z2"]) == (112, 310) and c["shape"] == "path"
+    cells = heatmodel.expand_cells(c)
+    assert cells[0] == (100, 300) and cells[-1] == (111, 310) and len(cells) == 8
+    # 우선순위 계산(DB에서 문자열로 읽음)도 같은 칸
+    assert heatmodel.expand_cells({**c, "points": __import__("json").dumps(pts)}) == cells
+
+
+def test_path_validation():
+    base = {**SAMPLE, "x": 400, "z": 400, "shape": "path"}
+    assert client.post("/api/complaints", json={**base, "points": [[400, 400]]}).status_code == 400
+    assert client.post("/api/complaints", json={**base, "points": [[1, 1], [5, 5]]}).status_code == 400  # 시작점 불일치
+    long_path = [[400, 400 + i] for i in range(0, 200, 5)]  # 195칸 → 가로수 60곳 넘음
+    assert client.post("/api/complaints", json={**base, "points": long_path}).status_code == 400
+    assert client.post("/api/complaints", json={**base, "points": [[400, 400]] * 301}).status_code == 422

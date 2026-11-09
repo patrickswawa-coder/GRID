@@ -85,10 +85,11 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 | `likes` | int | 공감 수 |
 | `ai_urgency` | int \| null | AI가 매긴 긴급도 1(낮음)~3(높음), AI 꺼져 있으면 null |
 | `ai_tag` | str \| null | AI가 붙인 한 단어 태그 (예: "야간안전") |
-| `x2`, `z2` | int \| null | (선택) 여러 칸에 놓기의 끝점(줄) 또는 반대 모서리(네모). 한 칸 제안은 null |
-| `shape` | str \| null | (선택) `"line"` 줄 / `"area"` 네모. null 이면 한 칸. 개선 제안 유형만 가능 |
+| `x2`, `z2` | int \| null | (선택) 여러 칸 제안의 끝점(자유 그리기·줄) 또는 반대 모서리(네모). 한 칸 제안은 null |
+| `shape` | str \| null | (선택) `"path"` 자유 그리기 / `"area"` 네모 / `"line"` 줄(예전 방식). null 이면 한 칸. 개선 제안 유형만 가능 |
+| `points` | [[x,z],…] \| null | (선택) `path` 일 때 손가락이 지나간 칸 목록. 첫 점 = (`x`,`z`), 최대 300점. 서버가 마지막 점으로 `x2`,`z2` 를 채움 |
 
-**여러 칸 제안(줄·네모)** 은 민원 1건으로 저장되고, 블록이 놓일 칸은 `web/js/shape.js` `expandCells()` 와
+**여러 칸 제안(자유 그리기·네모)** 은 민원 1건으로 저장되고, 블록이 놓일 칸은 `web/js/shape.js` `expandCells()` 와
 `backend/heatmodel.py` `expand_cells()` 가 **같은 규칙**으로 펼칩니다 (유형별 간격 `STEP`, 최대 30곳).
 `x`, `z`, `lat`, `lng`, `zone` 은 시작점 기준이라 대시보드·통계는 기존과 똑같이 1건으로 셉니다.
 | `created_at` | str | ISO 8601, 서버 시간(KST) |
@@ -120,7 +121,7 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 |---|---|---|
 | GET | `/api/health` | `{"status":"ok"}` |
 | GET | `/api/complaints?since_id=0&limit=500` | 민원 목록 (id 오름차순). `since_id`보다 큰 것만 |
-| POST | `/api/complaints` | 등록. body: `{x, z, lat, lng, zone, type, text}` (+ 선택 `x2, z2, shape`, 30곳 넘으면 400) → 저장된 민원. `text`는 비워도 됨(비우면 "<유형> 요청"으로 저장). 같은 IP가 3초 안에 다시 보내면 429, 같은 IP·칸·유형을 10분 안에 다시 보내면 409 |
+| POST | `/api/complaints` | 등록. body: `{x, z, lat, lng, zone, type, text}` (+ 선택 `shape`, `x2, z2` 또는 `points`, 30곳 넘으면 400) → 저장된 민원. `text`는 비워도 됨(비우면 "<유형> 요청"으로 저장). 같은 IP가 3초 안에 다시 보내면 429, 같은 IP·칸·유형을 10분 안에 다시 보내면 409 |
 | POST | `/api/complaints/{id}/like` | 공감 +1 → 갱신된 민원. 같은 `X-Client-Id`(없으면 같은 IP)가 같은 민원에 다시 누르면 409 |
 | GET | `/api/stats` | `{total, by_type:{}, by_zone:{}, top_zones:[{zone,count,top_type}], today}` |
 | GET | `/api/ai/summary` | `{summary, generated_at, ai:true/false}` 최근 민원 요약 (5분 캐시) |

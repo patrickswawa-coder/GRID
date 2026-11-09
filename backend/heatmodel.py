@@ -29,26 +29,74 @@ EFFECTS = {
     "coolpave": dict(size=9, impCut=0.6),
 }
 FIX = set(EFFECTS)
-# 여러 칸 제안(줄·네모) — web/js/shape.js 의 STEP, MAX_CELLS, expandCells() 와 같게
+# 여러 칸 제안(자유 그리기·네모·줄) — web/js/shape.js 의 STEP, MAX_CELLS, expandCells() 와 같게
+# (두 언어 결과를 맞추려고 hypot 대신 sqrt, round 대신 floor(v + 0.5))
 STEP = {"tree": 3, "shade": 3, "coolfog": 4, "pocketpark": 4, "greenroof": 3, "coolpave": 3}
 MAX_CELLS = 30
-SHAPES = ("line", "area")
+MAX_POINTS = 300
+SHAPES = ("line", "area", "path")
 
 
 def _rnd(v):
-    return math.floor(v + 0.5)  # JS 와 반올림을 맞춤 (파이썬 round 는 짝수 반올림)
+    return math.floor(v + 0.5)
+
+
+def _len(dx, dz):
+    return math.sqrt(dx * dx + dz * dz)
+
+
+def _points(c):
+    pts = c.get("points")
+    if isinstance(pts, str):
+        try:
+            pts = json.loads(pts)
+        except ValueError:
+            pts = None
+    return pts if isinstance(pts, list) else None
+
+
+def path_length(points):
+    return sum(_len(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]) for i in range(1, len(points)))
+
+
+def _along_path(points, step):
+    total = path_length(points)
+    targets, t = [], 0.0
+    while t <= total + 1e-9:
+        targets.append(t)
+        t += step
+    if total - targets[-1] >= step / 2:
+        targets.append(total)
+    out, seg, seg_start = [], 1, 0.0
+    for t in targets:
+        while True:
+            ax, az = points[seg - 1]
+            dx, dz = points[seg][0] - ax, points[seg][1] - az
+            L = _len(dx, dz)
+            if t <= seg_start + L + 1e-9 or seg == len(points) - 1:
+                break
+            seg_start += L
+            seg += 1
+        f = min(1, (t - seg_start) / L) if L > 0 else 0
+        p = (_rnd(ax + dx * f), _rnd(az + dz * f))
+        if p not in out:
+            out.append(p)
+    return out
 
 
 def expand_cells(c):
-    """제안 dict {type, x, z, x2?, z2?, shape?} → 블록이 놓일 [(x, z)]"""
+    """제안 dict {type, x, z, x2?, z2?, shape?, points?} → 블록이 놓일 [(x, z)]"""
     shape, x2, z2 = c.get("shape"), c.get("x2"), c.get("z2")
     x, z = c["x"], c["z"]
-    if shape not in SHAPES or x2 is None or z2 is None:
-        return [(x, z)]
     step = STEP.get(c["type"], 3)
+    if shape == "path":
+        pts = _points(c)
+        return _along_path(pts, step) if pts and len(pts) >= 2 else [(x, z)]
+    if shape not in ("line", "area") or x2 is None or z2 is None:
+        return [(x, z)]
     if shape == "line":
         dx, dz = x2 - x, z2 - z
-        n = max(1, _rnd(math.hypot(dx, dz) / step))
+        n = max(1, _rnd(_len(dx, dz) / step))
         out = []
         for i in range(n + 1):
             p = (_rnd(x + dx * i / n), _rnd(z + dz * i / n))
@@ -226,7 +274,7 @@ def api_priority(limit: int = 30):
     from main import db  # 순환 import 방지
 
     with db() as conn:
-        rows = [dict(r) for r in conn.execute("SELECT x, z, x2, z2, shape, type, likes, id FROM complaints").fetchall()]
+        rows = [dict(r) for r in conn.execute("SELECT x, z, x2, z2, shape, points, type, likes, id FROM complaints").fetchall()]
     key = (len(rows), max((r["id"] for r in rows), default=0), sum(r["likes"] for r in rows))
     if _cache["key"] != key:
         _cache.update(key=key, data=priority(rows))
