@@ -245,19 +245,26 @@ function enterSpot() {
   return true;
 }
 
+const SPOT_PUSH = Number(QS.get("push")) || 12; // 가장자리 지점: 시점을 안쪽으로 미는 칸 수 (?push= 로 시험)
 function flySpot() {
   focusTo = null;
   const { width: W, depth: D } = map.meta;
   const px = spot.x + 0.5, pz = spot.z + 0.5;
   // 기본: 남동쪽에서 바라봄 (주변 골목까지 보이게)
   let ux = 55 / 105, uz = 90 / 105, tx = px, tz = pz;
-  // 지도 가장자리 근처(예: 북쪽 끝의 시외버스터미널)면 기본 방향으로는 화면 위쪽 절반이 지도 밖 하늘이 된다.
-  // → 지도 바깥쪽에서 안쪽(지도 가운데 방향)을 바라보게 돌리고, 핀이 아래 카드 바로 위에 오도록 시점을 안쪽으로 조금 민다.
-  //   (카메라와 핀 사이의 지도 밖 띠는 아래 카드에 가려짐)
-  if (Math.min(px, pz, W - px, D - pz) < 110) {
-    const vx = W / 2 - px, vz = D / 2 - pz, L = Math.hypot(vx, vz) || 1;
-    ux = -vx / L; uz = -vz / L;
-    tx = px - ux * 22; tz = pz - uz * 22;
+  // 지도 가장자리 근처(예: 북쪽 끝의 시외버스터미널)면 기본 방향으로는 화면 위쪽이 지도 밖 하늘이 된다.
+  // → 가까운 경계선과 '수직으로' 지도 안쪽을 바라보게 돌린다 (가운데 방향으로 보면 경계선이 대각선으로 화면을 가로지름).
+  //   그리고 핀이 아래 카드 바로 위에 오도록 시점을 안쪽으로 밀어, 카메라 쪽(지도 밖) 띠는 카드에 가려지게 한다.
+  const EDGE = 110;
+  let ox = 0, oz = 0;
+  if (pz < EDGE) oz -= (EDGE - pz) / EDGE;          // 북쪽 경계 → 바깥(북)에서 남쪽을 봄
+  if (D - pz < EDGE) oz += (EDGE - (D - pz)) / EDGE; // 남쪽
+  if (px < EDGE) ox -= (EDGE - px) / EDGE;          // 서쪽
+  if (W - px < EDGE) ox += (EDGE - (W - px)) / EDGE; // 동쪽
+  if (ox || oz) {
+    const L = Math.hypot(ox, oz);
+    ux = ox / L; uz = oz / L;
+    tx = px - ux * SPOT_PUSH; tz = pz - uz * SPOT_PUSH;
   }
   controls.target.set(tx, 0, tz);
   camera.position.set(tx + ux * 105, 85, tz + uz * 105);
