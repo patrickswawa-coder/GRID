@@ -183,3 +183,28 @@ def test_old_db_is_migrated(tmp_path, monkeypatch):
     main.init_db()
     with main.db() as conn:
         assert conn.execute("SELECT status FROM complaints").fetchone()[0] == "received"
+
+
+def test_multi_line_and_area():
+    import heatmodel
+    line = {**SAMPLE, "x": 100, "z": 100, "x2": 112, "z2": 100, "shape": "line", "text": "통학로 전체에 가로수"}
+    r = client.post("/api/complaints", json=line)
+    assert r.status_code == 201
+    c = r.json()
+    assert (c["x2"], c["z2"], c["shape"]) == (112, 100, "line")
+    assert heatmodel.expand_cells(c) == [(100, 100), (103, 100), (106, 100), (109, 100), (112, 100)]
+    area = {**SAMPLE, "type": "pocketpark", "x": 50, "z": 50, "x2": 58, "z2": 54, "shape": "area"}
+    assert client.post("/api/complaints", json=area).status_code == 201
+    assert heatmodel.expand_cells(area) == [(50, 50), (54, 50), (58, 50), (50, 54), (54, 54), (58, 54)]
+    # 한 칸 제안은 끝점이 와도 무시
+    one = client.post("/api/complaints", json={**SAMPLE, "x": 70, "z": 70, "x2": 90, "z2": 90}).json()
+    assert one["x2"] is None and one["shape"] is None
+
+
+def test_multi_validation():
+    base = {**SAMPLE, "x": 200, "z": 200, "x2": 210, "z2": 200}
+    assert client.post("/api/complaints", json={**base, "shape": "circle"}).status_code == 422
+    assert client.post("/api/complaints", json={**base, "shape": "line", "x2": None}).status_code == 400
+    assert client.post("/api/complaints", json={**base, "shape": "line", "type": "trash"}).status_code == 400
+    too_big = {**base, "shape": "area", "x2": 260, "z2": 260}
+    assert client.post("/api/complaints", json=too_big).status_code == 400
