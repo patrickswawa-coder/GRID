@@ -6,7 +6,7 @@ import { makeMarker } from "./markers.js";
 import { loadLabels } from "./labels.js";
 import { computeHeat, paintHeat, heatLevel, zoneHeat, scoreAt, buildMods, meanHeat, heatRGB } from "./heat.js";
 import { TYPES, TYPE_BY_CODE, FIX_TYPES, REPORT_TYPES } from "./types.js";
-import { expandCells, expandAll, isMulti, MAX_CELLS } from "./shape.js";
+import { expandCells, expandAll, isMulti, MAX_CELLS, STEP } from "./shape.js";
 
 const API = window.GRID_API || ""; // 같은 서버면 빈 문자열
 const POLL_MS = 8000;
@@ -462,6 +462,7 @@ function setShape(s, quiet = false) {
   document.querySelectorAll("#shapeBox .seg button").forEach((b) => b.classList.toggle("on", b.dataset.shape === s));
   if (!quiet) {
     refreshPreview();
+    if (s === "one") setPeek(false);
     if (s !== "one") {
       toast(s === "line" ? "줄의 끝 위치를 지도에서 눌러 주세요 👆" : "네모의 반대쪽 모서리를 지도에서 눌러 주세요 👆", 3500);
       closeSheetPeek();
@@ -470,13 +471,28 @@ function setShape(s, quiet = false) {
 }
 document.querySelectorAll("#shapeBox .seg button").forEach((b) => { b.onclick = () => setShape(b.dataset.shape); });
 function setEnd(x, z) {
+  // 줄이 너무 길면 같은 방향으로 최대 길이까지만
+  if (shape === "line") {
+    const d = { type: chosenType, x: selected.x, z: selected.z, x2: x, z2: z, shape };
+    if (expandCells(d).length > MAX_CELLS) {
+      const dx = x - selected.x, dz = z - selected.z, len = Math.hypot(dx, dz);
+      const maxLen = (MAX_CELLS - 1) * (STEP[chosenType] || 3);
+      x = selected.x + Math.trunc((dx * maxLen) / len);
+      z = selected.z + Math.trunc((dz * maxLen) / len);
+      toast(`한 번에 ${MAX_CELLS}곳까지라 길이를 줄였어요`);
+    }
+  }
   endCell = { x, z };
+  setPeek(false);
   refreshPreview();
 }
-// 폰에서 시트가 지도를 많이 가리면 끝점을 누르기 어려우니, 시트를 잠깐 낮춘다
+// 끝점을 고르는 동안은 시트를 작게 접어 지도를 넓게 보여준다
+function setPeek(on) {
+  $("#sheet").classList.toggle("peek", on);
+  liftView($("#sheet"));
+}
 function closeSheetPeek() {
-  if (innerWidth >= 700) return;
-  focusTo = new THREE.Vector3(selected.x + 0.5, 0, selected.z + 0.5);
+  setPeek(true);
 }
 
 // 미리보기(반투명 블록·끝점 커서·네모)와 효과 문구를 지금 상태로 다시 그린다
@@ -557,7 +573,7 @@ function showMultiEffect(t, el) {
   const d = Math.round(b) - Math.round(a);
   const m = (map.meta.cell || 5) * Math.round(Math.hypot(endCell.x - selected.x, endCell.z - selected.z));
   const what = shape === "line" ? `약 ${m}m 구간에 ${t.label} <b>${cells.length}곳</b>` : `네모 영역에 ${t.label} <b>${cells.length}곳</b>`;
-  el.innerHTML = `${t.icon} ${what}<br>놓으면 이 구간 열섬 지수 평균 <b>${Math.round(b)} → ${Math.round(a)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})<br><small>다른 곳을 누르면 끝점이 바뀌어요 · 제안 1건으로 등록돼요</small>`;
+  el.innerHTML = `${t.icon} ${what}<br>놓으면 이 구간 열섬 지수 평균 <b>${Math.round(b)} → ${Math.round(a)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})<br><small>지도를 다시 누르면 끝점이 바뀌어요 · 제안 1건으로 등록돼요</small>`;
 }
 
 function updateSubmit() {
@@ -638,6 +654,7 @@ function closeSheet() {
   endCursor.visible = false;
   areaBox.visible = false;
   setShape("one", true);
+  $("#sheet").classList.remove("peek");
   $("#shapeHint").hidden = true;
 }
 $("#cancel").onclick = closeSheet;
