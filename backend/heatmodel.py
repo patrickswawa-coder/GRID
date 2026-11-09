@@ -29,6 +29,40 @@ EFFECTS = {
     "coolpave": dict(size=9, impCut=0.6),
 }
 FIX = set(EFFECTS)
+# 여러 칸 제안(줄·네모) — web/js/shape.js 의 STEP, MAX_CELLS, expandCells() 와 같게
+STEP = {"tree": 3, "shade": 3, "coolfog": 4, "pocketpark": 4, "greenroof": 3, "coolpave": 3}
+MAX_CELLS = 30
+SHAPES = ("line", "area")
+
+
+def _rnd(v):
+    return math.floor(v + 0.5)  # JS 와 반올림을 맞춤 (파이썬 round 는 짝수 반올림)
+
+
+def expand_cells(c):
+    """제안 dict {type, x, z, x2?, z2?, shape?} → 블록이 놓일 [(x, z)]"""
+    shape, x2, z2 = c.get("shape"), c.get("x2"), c.get("z2")
+    x, z = c["x"], c["z"]
+    if shape not in SHAPES or x2 is None or z2 is None:
+        return [(x, z)]
+    step = STEP.get(c["type"], 3)
+    if shape == "line":
+        dx, dz = x2 - x, z2 - z
+        n = max(1, _rnd(math.hypot(dx, dz) / step))
+        out = []
+        for i in range(n + 1):
+            p = (_rnd(x + dx * i / n), _rnd(z + dz * i / n))
+            if p not in out:
+                out.append(p)
+        return out
+
+    def axis(a, b):
+        lo, span = min(a, b), abs(b - a)
+        n = span // step + 1
+        off = (span - (n - 1) * step) // 2
+        return [lo + off + i * step for i in range(n)]
+
+    return [(px, pz) for pz in axis(z, z2) for px in axis(x, x2)]
 
 _state = {}  # 지도·기본 지수 캐시
 
@@ -122,7 +156,8 @@ def priority(complaints):
     st = _load()
     m = st["meta"]; s = m.get("zone_size", 40); W, D = m["width"], m["depth"]
     base = st["base"]
-    props = [(c["type"], c["x"], c["z"]) for c in complaints if c["type"] in FIX and 0 <= c["x"] < W and 0 <= c["z"] < D]
+    props = [(c["type"], px, pz) for c in complaints if c["type"] in FIX
+             for px, pz in expand_cells(c) if 0 <= px < W and 0 <= pz < D]
     after = compute(props) if props else base
 
     zones = {}
@@ -191,7 +226,7 @@ def api_priority(limit: int = 30):
     from main import db  # 순환 import 방지
 
     with db() as conn:
-        rows = [dict(r) for r in conn.execute("SELECT x, z, type, likes, id FROM complaints").fetchall()]
+        rows = [dict(r) for r in conn.execute("SELECT x, z, x2, z2, shape, type, likes, id FROM complaints").fetchall()]
     key = (len(rows), max((r["id"] for r in rows), default=0), sum(r["likes"] for r in rows))
     if _cache["key"] != key:
         _cache.update(key=key, data=priority(rows))

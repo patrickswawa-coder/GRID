@@ -14,6 +14,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Literal, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse
@@ -118,6 +119,11 @@ def init_db():
         for col, ddl in (("status", "TEXT NOT NULL DEFAULT 'received'"), ("reply", "TEXT"), ("status_at", "TEXT")):
             if col not in have:
                 conn.execute(f"ALTER TABLE complaints ADD COLUMN {col} {ddl}")
+        # 여러 칸 제안(줄·네모)용 끝점 — 예전 DB에도 열을 추가 (기존 행은 NULL = 한 칸)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(complaints)")}
+        for col, typ in (("x2", "INTEGER"), ("z2", "INTEGER"), ("shape", "TEXT")):
+            if col not in cols:
+                conn.execute(f"ALTER TABLE complaints ADD COLUMN {col} {typ}")
 
 
 init_db()
@@ -151,6 +157,10 @@ class ComplaintIn(BaseModel):
     zone: str = Field(min_length=1, max_length=20)
     type: str
     text: str = Field(min_length=1, max_length=200)
+    # 선택: 여러 칸에 한 번에 놓기. shape "line"(줄) / "area"(네모), (x2, z2) = 끝점·반대 모서리
+    x2: Optional[int] = Field(None, ge=0, le=5000)
+    z2: Optional[int] = Field(None, ge=0, le=5000)
+    shape: Optional[Literal["line", "area"]] = None
 
 
 class Login(BaseModel):
@@ -231,14 +241,25 @@ def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks):
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "의견을 입력해 주세요.")
+    x2, z2, shape = body.x2, body.z2, body.shape
+    if shape is None:
+        x2 = z2 = None
+    else:
+        if x2 is None or z2 is None:
+            raise HTTPException(400, "끝점을 골라 주세요.")
+        if body.type not in heatmodel.FIX:
+            raise HTTPException(400, "여러 칸에 놓기는 개선 제안만 할 수 있어요.")
+        n = len(heatmodel.expand_cells({"type": body.type, "x": body.x, "z": body.z, "x2": x2, "z2": z2, "shape": shape}))
+        if n > heatmodel.MAX_CELLS:
+            raise HTTPException(400, f"범위가 너무 넓어요. 블록 {heatmodel.MAX_CELLS}개 이하로 골라 주세요.")
     ip = request.client.host if request.client else "?"
     check_rate(ip)
     check_duplicate(ip, body.x, body.z, body.type)
     with _db_lock, db() as conn:
         cur = conn.execute(
-            "INSERT INTO complaints (x, z, lat, lng, zone, type, text, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (body.x, body.z, body.lat, body.lng, body.zone.upper(), body.type, text, now_kst()),
+            "INSERT INTO complaints (x, z, lat, lng, zone, type, text, created_at, x2, z2, shape)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (body.x, body.z, body.lat, body.lng, body.zone.upper(), body.type, text, now_kst(), x2, z2, shape),
         )
         new_id = cur.lastrowid
         row = conn.execute("SELECT * FROM complaints WHERE id = ?", (new_id,)).fetchone()
