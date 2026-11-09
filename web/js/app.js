@@ -265,7 +265,10 @@ function hideSpotCard() {
   document.body.classList.remove("spot-open");
 }
 let spotFlow = false;
-$("#spotGo").onclick = () => { hideSpotCard(); spotFlow = true; selectCell(spot.x, spot.z); };
+$("#spotGo").onclick = () => {
+  hideSpotCard(); spotFlow = true; selectCell(spot.x, spot.z);
+  setPeek(false); // 이미 '의견 남기기'를 눌렀으니 접힌 상태가 아니라 바로 펼쳐서
+};
 $("#spotLook").onclick = () => { hideSpotCard(); toast("바꾸고 싶은 곳을 눌러 주세요 👆", 3000); };
 
 // 핀은 화면 좌표로 따라다니게 (3D 아이콘보다 멀리서도 잘 보임)
