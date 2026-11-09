@@ -137,6 +137,25 @@ import heatmodel  # noqa: E402  구역별 열섬 × 시민 제안 우선순위 (
 
 app.include_router(heatmodel.router)
 
+import geo  # noqa: E402  경위도 ↔ 지도 칸 (정확한 TM 변환, 예전 근사식은 15~38m 오차)
+
+
+def map_latlng(x: int, z: int):
+    """민원 위경도는 브라우저 값 대신 칸(x, z)으로 서버가 계산한다 (관리자 지도 위치가 정확하도록)."""
+    return tuple(round(v, 6) for v in geo.cell_to_latlng(heatmodel._load()["meta"], x, z))
+
+
+def fix_saved_latlng():
+    """예전 근사식으로 저장된 민원 위경도를 칸 기준으로 다시 계산. 칸이 기준이라 몇 번 실행해도 같다."""
+    if not heatmodel._load()["meta"].get("tm"):
+        return
+    with db() as conn:
+        for r in conn.execute("SELECT id, x, z FROM complaints").fetchall():
+            conn.execute("UPDATE complaints SET lat = ?, lng = ? WHERE id = ?", (*map_latlng(r[1], r[2]), r[0]))
+
+
+fix_saved_latlng()
+
 
 def row_to_dict(row: sqlite3.Row) -> dict:
     d = dict(row)
@@ -274,7 +293,7 @@ def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks):
         cur = conn.execute(
             "INSERT INTO complaints (x, z, lat, lng, zone, type, text, created_at, x2, z2, shape, points)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (body.x, body.z, body.lat, body.lng, body.zone.upper(), body.type, text, now_kst(), x2, z2, shape, points),
+            (body.x, body.z, *map_latlng(body.x, body.z), body.zone.upper(), body.type, text, now_kst(), x2, z2, shape, points),
         )
         new_id = cur.lastrowid
         row = conn.execute("SELECT * FROM complaints WHERE id = ?", (new_id,)).fetchone()

@@ -235,3 +235,12 @@ def test_path_validation():
     long_path = [[400, 400 + i] for i in range(0, 200, 5)]  # 195칸 → 가로수 66곳, 50곳 넘음
     assert client.post("/api/complaints", json={**base, "points": long_path}).status_code == 400
     assert client.post("/api/complaints", json={**base, "points": [[400, 400]] * 301}).status_code == 422
+
+
+def test_latlng_from_cell_not_browser():
+    # 브라우저가 보낸 위경도(예전 근사식 등)는 무시하고 칸(x, z)으로 서버가 정확히 계산
+    import geo
+    r = client.post("/api/complaints", json={**SAMPLE, "x": 409, "z": 3, "lat": 1.0, "lng": 2.0, "type": "coolfog"})
+    assert r.status_code == 201
+    lat, lng = geo.cell_to_latlng(main.heatmodel._load()["meta"], 409, 3)
+    assert abs(r.json()["lat"] - lat) < 1e-6 and abs(r.json()["lng"] - lng) < 1e-6

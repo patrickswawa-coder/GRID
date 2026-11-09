@@ -10,6 +10,8 @@ import math
 from pathlib import Path
 
 import numpy as np
+
+import geo
 from fastapi import APIRouter
 
 router = APIRouter()
@@ -220,8 +222,7 @@ def priority(complaints):
             # 토지 구성 (AI 정책 제안이 '자료에 있는 근거'만 쓰도록 같이 넘김)
             paved = (hb | (g == ROAD) | (g == SIDEWALK)).mean()
             green = (~hb & (g == PARK)).mean() + 0.6 * (~hb & (g == GRASS)).mean()
-            lat = m["origin_lat"] - (zz + s / 2) * m["cell"] / 111320
-            lng = m["origin_lng"] + (zx + s / 2) * m["cell"] / (111320 * math.cos(math.radians(m["origin_lat"])))
+            lat, lng = geo.cell_to_latlng(m, zx + s / 2 - 0.5, zz + s / 2 - 0.5)  # 구역 가운데 (정확한 TM 변환)
             zones[key] = dict(zone=key, heat=float(b.mean()), heat_p90=float(np.percentile(b, 90)),
                               heat_after=float(a.mean()), built=float(urban), paved=float(paved), green=float(green),
                               lat=lat, lng=lng, proposals=0, reports=0, likes=0, types={})
@@ -266,7 +267,7 @@ _cache = {"key": None, "data": None}
 def api_meta():
     """지도 크기·구역 크기 (관리자 페이지가 구역 격자를 그릴 때 사용)"""
     m = _load()["meta"]
-    return {k: m.get(k) for k in ("name", "width", "depth", "cell", "zone_size", "origin_lat", "origin_lng")}
+    return {k: m.get(k) for k in ("name", "width", "depth", "cell", "zone_size", "origin_lat", "origin_lng", "tm")}
 
 
 @router.get("/api/priority")
