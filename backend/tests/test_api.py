@@ -102,3 +102,12 @@ def test_priority_uses_zone_mean_and_no_arbitrary_ties():
     assert all(rows[i]["heat"] >= rows[i + 1]["heat"] for i in range(len(rows) - 1))
     for r in rows[:5]:
         assert 0 <= r["paved"] <= 1 and 0 <= r["green"] <= 1
+
+
+def test_duplicate_same_cell_same_type_blocked():
+    body = {**SAMPLE, "x": 123, "z": 45, "type": "shade"}
+    assert client.post("/api/complaints", json=body).status_code == 201
+    assert client.post("/api/complaints", json=body).status_code == 409
+    # 다른 유형이나 다른 칸은 그대로 등록됨
+    assert client.post("/api/complaints", json={**body, "type": "tree"}).status_code == 201
+    assert client.post("/api/complaints", json={**body, "x": 124}).status_code == 201

@@ -13,6 +13,7 @@ import argparse
 import json
 import random
 import time
+import urllib.error
 import urllib.request
 
 import voxelfmt as vf
@@ -67,6 +68,7 @@ def main():
     roofs = [(b[i], b[i + 1]) for i in range(0, len(b), 4)]
     hot = pick_hot(a, meta, cand) if a.focus else random.sample(cand, 4)
     types = list(WEIGHTS)
+    skipped = 0
     for i in range(a.n):
         if random.random() < 0.6:
             hx, hz = random.choice(hot)
@@ -82,12 +84,18 @@ def main():
                 "type": t, "text": random.choice(TEXTS[t])}
         req = urllib.request.Request(f"{a.api}/api/complaints", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
-        cid = json.load(urllib.request.urlopen(req))["id"]
+        try:
+            cid = json.load(urllib.request.urlopen(req))["id"]
+        except urllib.error.HTTPError as e:
+            if e.code in (409, 429):  # 같은 칸·유형 중복, 너무 빠름 → 건너뜀
+                skipped += 1
+                continue
+            raise
         if a.delay:
             time.sleep(a.delay)
         for _ in range(random.choices([0, 1, 3, 8], weights=[5, 3, 2, 1])[0]):
             urllib.request.urlopen(urllib.request.Request(f"{a.api}/api/complaints/{cid}/like", method="POST"))
-    print(f"{a.n}건 등록 완료")
+    print(f"{a.n - skipped}건 등록 완료" + (f" (중복 {skipped}건 건너뜀)" if skipped else ""))
 
 
 if __name__ == "__main__":
