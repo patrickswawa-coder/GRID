@@ -638,11 +638,9 @@ function updateProbe() {
   const h = simOn && heatSim ? heatSim : heat;
   const v = Math.round(h.value[z * map.meta.width + x]);
   const lv = heatLevel(v);
-  const base = lastEnv?.weather?.temp;
+  // 지수는 '여름철 열이 쌓이는 정도'라서 지금 기온(겨울엔 10°C 등)에 더하지 않고, 여름 한낮 기준 차이만 보여준다
   const dT = tempOffset(v);
-  const tLine = base != null
-    ? `이곳 추정 <b>${(base + dT).toFixed(1)}°C</b> <small>(기상청 ${base.toFixed(1)}°C ${dT >= 0 ? "+" : ""}${dT.toFixed(1)})</small>`
-    : `<small>동네 평균보다 약 ${dT >= 0 ? "+" : ""}${dT.toFixed(1)}°C (추정)</small>`;
+  const tLine = `<small>여름 한낮엔 보통 지역보다 약 ${dT >= 0 ? "+" : "−"}${Math.abs(dT).toFixed(1)}°C <span class="muted">(추정)</span></small>`;
   let sim = "";
   if (simOn && heatSim) {
     const d = Math.round(heat.value[z * map.meta.width + x]) - v;
