@@ -80,11 +80,15 @@
   <!-- 민원 등록 시트 -->
   <section id="sheet" class="sheet" aria-label="민원 등록">
     <form id="form">
-      <div class="sheet-head">
-        <h2>이 위치를 어떻게 바꿀까요?</h2>
-        <span id="zone" class="chip"></span>
+      <div id="sheet-top" class="sheet-top" role="button" tabindex="0" aria-label="제안 창 펼치기·접기">
+        <div class="grabber"></div>
+        <div class="sheet-head">
+          <h2>이 위치를 어떻게 바꿀까요?</h2>
+          <span id="zone" class="chip"></span>
+        </div>
+        <div id="heatInfo" class="heat-info"></div>
+        <div class="peek-hint">▲ 눌러서 제안하기</div>
       </div>
-      <div id="heatInfo" class="heat-info"></div>
       <div class="types-title">🌡️ 열섬 줄이기 제안</div>
       <div id="types-fix" class="types"></div>
       <div class="types-title">📢 환경 불편 신고</div>
