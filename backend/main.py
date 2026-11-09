@@ -156,7 +156,7 @@ class ComplaintIn(BaseModel):
     lng: float = Field(ge=-180, le=180)
     zone: str = Field(min_length=1, max_length=20)
     type: str
-    text: str = Field(min_length=1, max_length=200)
+    text: str = Field(default="", max_length=200)  # 비워도 됨 (거리에서 QR로 빠르게 등록)
     # 선택: 여러 칸에 한 번에 놓기. shape "line"(줄) / "area"(네모), (x2, z2) = 끝점·반대 모서리
     x2: Optional[int] = Field(None, ge=0, le=5000)
     z2: Optional[int] = Field(None, ge=0, le=5000)
@@ -238,9 +238,8 @@ def list_complaints(since_id: int = 0, limit: int = 500):
 def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks):
     if body.type not in TYPES:
         raise HTTPException(400, f"알 수 없는 유형입니다: {body.type}")
-    text = body.text.strip()
-    if not text:
-        raise HTTPException(400, "의견을 입력해 주세요.")
+    # 글 없이 유형만 골라도 등록된다. 목록·AI 요약에서 빈 칸이 되지 않게 유형 이름으로 채움
+    text = body.text.strip() or f"{TYPES[body.type]} 요청"
     x2, z2, shape = body.x2, body.z2, body.shape
     if shape is None:
         x2 = z2 = None

@@ -42,7 +42,6 @@ def test_create_list_like_stats():
 def test_validation():
     assert client.post("/api/complaints", json={**SAMPLE, "type": "ufo"}).status_code == 400
     assert client.post("/api/complaints", json={**SAMPLE, "type": "bench"}).status_code == 400  # 예전 유형은 새 등록 불가
-    assert client.post("/api/complaints", json={**SAMPLE, "text": ""}).status_code == 422
     assert client.post("/api/complaints", json={**SAMPLE, "text": "가" * 201}).status_code == 422
 
 
@@ -208,3 +207,9 @@ def test_multi_validation():
     assert client.post("/api/complaints", json={**base, "shape": "line", "type": "trash"}).status_code == 400
     too_big = {**base, "shape": "area", "x2": 260, "z2": 260}
     assert client.post("/api/complaints", json=too_big).status_code == 400
+
+
+def test_text_optional():
+    # 거리에서 QR로 들어온 시민이 유형만 골라 등록하는 경우
+    r = client.post("/api/complaints", json={**SAMPLE, "x": 77, "z": 88, "text": "  "})
+    assert r.status_code == 201 and r.json()["text"] == "가로수 심기 요청"

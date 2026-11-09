@@ -271,3 +271,31 @@ body.sheet-open .probe, body.sheet-open .crosshair { display: none; }
 .seg button { border: 0; background: transparent; border-radius: 9px; padding: 8px 2px; font-size: 12.5px; color: var(--ink); cursor: pointer; white-space: nowrap; }
 .seg button.on { background: #fff; color: var(--brand); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .shape-hint { font-size: 12.5px; color: #e8590c; background: #fff4e6; border-radius: 10px; padding: 7px 10px; margin-top: 6px; }
+
+/* ---- 거리 QR 위치 모드 */
+.spot-card {
+  position: fixed; z-index: 8; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 16px);
+  width: min(440px, calc(100vw - 24px)); background: var(--card); border-radius: 16px; padding: 14px 14px 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.22); display: grid; gap: 8px;
+}
+.spot-card[hidden] { display: none; }
+.spot-name { font-size: 16px; }
+.spot-heat { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+.spot-heat b { color: var(--ink); }
+.spot-card .primary { font-size: 16px; padding: 14px; }
+.spot-card .ghost { padding: 9px; font-size: 13.5px; }
+body.spot-open .probe, body.spot-open .crosshair, body.sheet-open .spot-card { display: none; }
+.here-pin {
+  position: fixed; z-index: 6; pointer-events: none; transform: translate(-50%, -100%);
+  font-size: 28px; line-height: 1; text-align: center; filter: drop-shadow(0 2px 3px rgba(0,0,0,.35));
+}
+.here-pin span { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 700; background: #e03131; color: #fff; padding: 2px 7px; border-radius: 99px; }
+.here-pin[hidden] { display: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.chips:empty { display: none; }
+.chip-q { border: 1px solid #d8dee9; background: #fff; border-radius: 99px; padding: 6px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); }
+.chip-q.on { border-color: var(--brand); background: #eef4ff; }
+@media (max-width: 480px) {
+  .spot-card { bottom: calc(env(safe-area-inset-bottom) + 66px); }
+  body.spot-open .env-now { display: none; }
+}

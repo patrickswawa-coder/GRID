@@ -120,7 +120,7 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 |---|---|---|
 | GET | `/api/health` | `{"status":"ok"}` |
 | GET | `/api/complaints?since_id=0&limit=500` | 민원 목록 (id 오름차순). `since_id`보다 큰 것만 |
-| POST | `/api/complaints` | 등록. body: `{x, z, lat, lng, zone, type, text}` (+ 선택 `x2, z2, shape`, 30곳 넘으면 400) → 저장된 민원. 같은 IP가 3초 안에 다시 보내면 429, 같은 IP·칸·유형을 10분 안에 다시 보내면 409 |
+| POST | `/api/complaints` | 등록. body: `{x, z, lat, lng, zone, type, text}` (+ 선택 `x2, z2, shape`, 30곳 넘으면 400) → 저장된 민원. `text`는 비워도 됨(비우면 "<유형> 요청"으로 저장). 같은 IP가 3초 안에 다시 보내면 429, 같은 IP·칸·유형을 10분 안에 다시 보내면 409 |
 | POST | `/api/complaints/{id}/like` | 공감 +1 → 갱신된 민원. 같은 `X-Client-Id`(없으면 같은 IP)가 같은 민원에 다시 누르면 409 |
 | GET | `/api/stats` | `{total, by_type:{}, by_zone:{}, top_zones:[{zone,count,top_type}], today}` |
 | GET | `/api/ai/summary` | `{summary, generated_at, ai:true/false}` 최근 민원 요약 (5분 캐시) |
