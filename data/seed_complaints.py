@@ -2,10 +2,17 @@
 
 실행: python data/seed_complaints.py --api http://localhost:8000 --n 80
   ※ 서버를 POST_INTERVAL=0 으로 띄워야 빨리 들어갑니다.
+     운영 서버(POST_INTERVAL=3)에 넣을 때는 --delay 3.2 를 붙이세요.
+
+시연용(추천): python data/seed_complaints.py --api http://서버 --n 60 --focus 5 --seed 7
+  --focus N : 서버 /api/priority 의 열섬 상위 N개 구역 안에 핫스팟을 잡아서
+              '뜨거운 곳에 시민 요구가 몰린다'는 흐름이 대시보드에 보이게 한다.
+  --seed    : 같은 숫자면 매번 같은 데이터 (리허설과 본 시연을 똑같이)
 """
 import argparse
 import json
 import random
+import time
 import urllib.request
 
 import voxelfmt as vf
@@ -26,11 +33,31 @@ WEIGHTS = {"tree": 6, "shade": 5, "pocketpark": 3, "coolfog": 2, "greenroof": 2,
            "trash": 3, "odor": 2, "noise": 2, "other": 1}
 
 
+def pick_hot(a, meta, cand):
+    """열섬 상위 구역(서버 /api/priority, 아직 민원이 없으면 열섬 순) 안의 인도·공원 칸을 핫스팟으로."""
+    s = meta.get("zone_size", 40)
+    with urllib.request.urlopen(f"{a.api}/api/priority?limit={a.focus}") as r:
+        zones = [z["zone"] for z in json.load(r)]
+    hot = []
+    for zone in zones:
+        zx, zz = ord(zone[0]) - 65, int(zone[1:]) - 1
+        inside = [(x, z) for x, z in cand if x // s == zx and z // s == zz]
+        if inside:
+            hot.append(random.choice(inside))
+    print("핫스팟 구역:", ", ".join(zones))
+    return hot or random.sample(cand, 4)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--api", default="http://localhost:8000")
     ap.add_argument("--n", type=int, default=80)
+    ap.add_argument("--focus", type=int, default=0, help="열섬 상위 N개 구역에 핫스팟 (0이면 무작위)")
+    ap.add_argument("--delay", type=float, default=0, help="등록 사이 대기(초). 서버 도배 방지 간격보다 길게")
+    ap.add_argument("--seed", type=int, default=None)
     a = ap.parse_args()
+    if a.seed is not None:
+        random.seed(a.seed)
 
     doc, ground = vf.load()
     meta = doc["meta"]
@@ -38,7 +65,7 @@ def main():
     cand = [(x, z) for z in range(meta["depth"]) for x in range(meta["width"]) if ground[z, x] in (2, 3)]
     b = doc["buildings"]
     roofs = [(b[i], b[i + 1]) for i in range(0, len(b), 4)]
-    hot = random.sample(cand, 4)
+    hot = pick_hot(a, meta, cand) if a.focus else random.sample(cand, 4)
     types = list(WEIGHTS)
     for i in range(a.n):
         if random.random() < 0.6:
@@ -56,6 +83,8 @@ def main():
         req = urllib.request.Request(f"{a.api}/api/complaints", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
         cid = json.load(urllib.request.urlopen(req))["id"]
+        if a.delay:
+            time.sleep(a.delay)
         for _ in range(random.choices([0, 1, 3, 8], weights=[5, 3, 2, 1])[0]):
             urllib.request.urlopen(urllib.request.Request(f"{a.api}/api/complaints/{cid}/like", method="POST"))
     print(f"{a.n}건 등록 완료")

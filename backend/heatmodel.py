@@ -131,12 +131,17 @@ def priority(complaints):
             key = zone_key(zx, zz, s)
             b = base[zz:zz + s, zx:zx + s]
             a = after[zz:zz + s, zx:zx + s]
-            urban = (st["H"][zz:zz + s, zx:zx + s] > 0).mean()
+            hb = st["H"][zz:zz + s, zx:zx + s] > 0
+            g = st["ground"][zz:zz + s, zx:zx + s]
+            urban = hb.mean()
+            # 토지 구성 (AI 정책 제안이 '자료에 있는 근거'만 쓰도록 같이 넘김)
+            paved = (hb | (g == ROAD) | (g == SIDEWALK)).mean()
+            green = (~hb & (g == PARK)).mean() + 0.6 * (~hb & (g == GRASS)).mean()
             lat = m["origin_lat"] - (zz + s / 2) * m["cell"] / 111320
             lng = m["origin_lng"] + (zx + s / 2) * m["cell"] / (111320 * math.cos(math.radians(m["origin_lat"])))
             zones[key] = dict(zone=key, heat=float(b.mean()), heat_p90=float(np.percentile(b, 90)),
-                              heat_after=float(a.mean()), built=float(urban), lat=lat, lng=lng,
-                              proposals=0, reports=0, likes=0, types={})
+                              heat_after=float(a.mean()), built=float(urban), paved=float(paved), green=float(green),
+                              lat=lat, lng=lng, proposals=0, reports=0, likes=0, types={})
     for c in complaints:
         if not (0 <= c["x"] < W and 0 <= c["z"] < D):
             continue
@@ -145,21 +150,27 @@ def priority(complaints):
         z["likes"] += c.get("likes", 0)
         z["types"][c["type"]] = z["types"].get(c["type"], 0) + 1
 
-    # 우선순위 = 열섬(상위 10% 칸 기준, 60%) + 시민 요구(제안+신고+공감/2, 40%)
+    # 우선순위 = 열섬(구역 평균, 60%) + 시민 요구(제안+신고+공감/2, 40%)
+    # 예전에는 상위 10% 칸(heat_p90)을 썼는데, 지수가 100에서 잘리기 때문에 시가지 구역 여러 곳이 100으로
+    # 동점이 되고 동점끼리 순서가 임의로 정해졌다 (평균 49인 구역이 3위). 평균은 포화가 거의 없고,
+    # 시민 페이지 리포트의 'TOP 3'(heat.js zoneHeat = 구역 평균)와도 같은 기준이다.
     demand = {k: z["proposals"] + z["reports"] + z["likes"] / 2 for k, z in zones.items()}
     dmax = max(demand.values()) or 1
     out = []
     for k, z in zones.items():
         if z["built"] < 0.02 and demand[k] == 0:
             continue  # 숲·밭만 있는 구역은 제외
-        z["score"] = round(0.6 * z["heat_p90"] + 0.4 * 100 * math.sqrt(demand[k] / dmax), 1)
+        z["score"] = round(0.6 * z["heat"] + 0.4 * 100 * math.sqrt(demand[k] / dmax), 1)
         z["top_type"] = max(z["types"], key=z["types"].get) if z["types"] else None
         z["name"] = zone_name(k, s, st["labels"])
-        for f in ("heat", "heat_p90", "heat_after", "lat", "lng", "built"):
+        for f in ("heat", "heat_p90", "heat_after", "lat", "lng"):
             z[f] = round(z[f], 6 if f in ("lat", "lng") else 1)
+        for f in ("built", "paved", "green"):
+            z[f] = round(z[f], 3)
         z["delta"] = round(z["heat"] - z["heat_after"], 1)
         out.append(z)
-    out.sort(key=lambda z: -z["score"])
+    # 반올림 동점은 평균 → 상위 10% 순으로 가른다 (순서가 매번 같게)
+    out.sort(key=lambda z: (-z["score"], -z["heat"], -z["heat_p90"], z["zone"]))
     for i, z in enumerate(out):
         z["rank"] = i + 1
     return out

@@ -93,3 +93,12 @@ def test_priority():
     assert hit and hit[0]["heat_after"] <= hit[0]["heat"]
     p = client.get("/api/ai/policy").json()
     assert p["ai"] is False and "1위" in p["text"]
+
+
+def test_priority_uses_zone_mean_and_no_arbitrary_ties():
+    # 시민 요구가 같으면(요구 0인 구역끼리) 열섬 '구역 평균'이 높은 곳이 위에 있어야 한다.
+    # (예전: 상위 10% 지수가 100에서 포화 → 평균 49 구역이 3위로 올라가던 문제)
+    rows = main.heatmodel.priority([])
+    assert all(rows[i]["heat"] >= rows[i + 1]["heat"] for i in range(len(rows) - 1))
+    for r in rows[:5]:
+        assert 0 <= r["paved"] <= 1 and 0 <= r["green"] <= 1

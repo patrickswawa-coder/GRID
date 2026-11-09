@@ -77,7 +77,7 @@ def naver_zone_map(mp, height=380):
     srcdoc iframe은 네이버 인증에서 거절되므로 static/naver_map.html 을 실제 주소로 띄운다."""
     zones = [{"lat": round(float(r.lat), 6), "lng": round(float(r.lng), 6), "c": "rgb({},{},{})".format(*r.color),
               "rank": int(r.rank), "name": str(r.name), "score": round(float(r.score)),
-              "heat": round(float(r.heat_p90)), "demand": float(r.demand),
+              "heat": round(float(r.heat)), "demand": float(r.demand),
               "p": int(r.proposals), "rp": int(r.reports), "lk": int(r.likes)} for r in mp.itertuples()]
     cfg = {"key": NAVER_KEY, "half": ZONE_M / 2, "zones": zones}
     # 네이버 인증은 페이지 주소 전체를 보내므로 주소는 짧게: 데이터는 같은 폴더 JSON 파일로 넘긴다
@@ -95,7 +95,7 @@ def priority_section():
     if pr.empty:
         return
     st.subheader("🎯 우선 개선 구역 — 열섬 위험 × 시민 요구")
-    st.caption("200m 구역별 · 점수 = 열섬 지수(상위 10% 칸) 60% + 시민 요구(제안·신고·공감) 40% · "
+    st.caption("200m 구역별 · 점수 = 열섬 지수(구역 평균) 60% + 시민 요구(제안·신고·공감) 40% · "
                "'실현 시'는 그 구역 시민 개선 제안이 모두 시행됐을 때의 시뮬레이션")
     top3 = pr.head(3)
     cols = st.columns(3)
@@ -105,7 +105,7 @@ def priority_section():
             st.markdown(f"#### {medal[z['rank'] - 1]} {z['name']}")
             a, b = st.columns(2)
             a.metric("우선순위 점수", f"{z['score']:.0f}")
-            b.metric("열섬 지수", f"{z['heat_p90']:.0f}", help="구역 안에서 가장 뜨거운 10% 칸의 지수")
+            b.metric("열섬 지수", f"{z['heat']:.0f}", help=f"구역 평균 · 가장 뜨거운 10% 칸은 {z['heat_p90']:.0f}")
             want = TYPE_LABELS.get(z["top_type"], "-") if z["top_type"] else "제안 없음"
             st.markdown(f"시민 제안 **{z['proposals']}건** · 신고 {z['reports']}건 · 공감 {z['likes']}  \n"
                         f"가장 많은 요청: **{want}**  \n"
@@ -114,7 +114,7 @@ def priority_section():
 
     left, right = st.columns([3, 2])
     with left:
-        pr["color"] = pr["heat_p90"].apply(heat_rgb)
+        pr["color"] = pr["heat"].apply(heat_rgb)
         pr["demand"] = pr["proposals"] + pr["reports"] + pr["likes"] / 2
         pr["elev"] = 15 + pr["demand"] * 25
         mp = pr[(pr["built"] > 0.02) | (pr["demand"] > 0)]
@@ -128,15 +128,15 @@ def priority_section():
                               radius=70, get_fill_color="color", pickable=True, auto_highlight=True, extruded=True,
                               coverage=0.9)
             st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view, map_style="light",
-                                     tooltip={"text": "{rank}위 {name}\n점수 {score} · 열섬 {heat_p90}\n제안 {proposals} · 신고 {reports} · 공감 {likes}"}),
+                                     tooltip={"text": "{rank}위 {name}\n점수 {score} · 열섬 {heat}\n제안 {proposals} · 신고 {reports} · 공감 {likes}"}),
                             height=380)
             st.caption("기둥 색 = 열섬 지수(초록→빨강), 기둥 높이 = 시민 요구")
     with right:
         q = pr[pr["built"] > 0.02]
-        fig = px.scatter(q, x="heat_p90", y="demand", size=q["score"].clip(lower=5), color="heat_p90",
+        fig = px.scatter(q, x="heat", y="demand", size=q["score"].clip(lower=5), color="heat",
                          color_continuous_scale=["#2f9e44", "#94d82d", "#fcd83c", "#fca01e", "#f05028", "#be192d"],
                          range_color=[0, 100], hover_name="name",
-                         labels={"heat_p90": "열섬 지수 (상위 10%)", "demand": "시민 요구"})
+                         labels={"heat": "열섬 지수 (구역 평균)", "demand": "시민 요구"})
         xm, ym = 70, max(1.0, q["demand"].quantile(0.75))
         fig.add_vline(x=xm, line_dash="dot", line_color="#adb5bd")
         fig.add_hline(y=ym, line_dash="dot", line_color="#adb5bd")
@@ -146,8 +146,8 @@ def priority_section():
         st.plotly_chart(fig, use_container_width=True, key="quad")
 
     with st.expander("📋 구역별 우선순위 표 (TOP 15)"):
-        t = pr.head(15)[["rank", "name", "score", "heat_p90", "heat", "heat_after", "proposals", "reports", "likes"]]
-        t.columns = ["순위", "구역", "점수", "열섬(상위10%)", "열섬 평균", "실현 시 평균", "제안", "신고", "공감"]
+        t = pr.head(15)[["rank", "name", "score", "heat", "heat_after", "heat_p90", "proposals", "reports", "likes"]]
+        t.columns = ["순위", "구역", "점수", "열섬 평균", "실현 시 평균", "열섬(상위10%)", "제안", "신고", "공감"]
         st.dataframe(t, use_container_width=True, hide_index=True)
         st.download_button("우선순위 CSV", t.to_csv(index=False).encode("utf-8-sig"),
                            file_name=f"grid_우선개선구역_{datetime.now():%Y%m%d_%H%M}.csv", mime="text/csv")
@@ -176,7 +176,6 @@ with st.sidebar:
     st.header("필터")
     sel_types = st.multiselect("제안·신고 유형", list(TYPE_LABELS)[:10], format_func=TYPE_LABELS.get, placeholder="전체 유형")
     st.caption(f"{REFRESH_SEC}초마다 자동 새로고침")
-    st.caption(f"API: {API}")
 
 
 def env_section():
