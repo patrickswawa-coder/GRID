@@ -213,24 +213,33 @@ _last_post: dict[str, float] = {}
 POST_INTERVAL = float(os.getenv("POST_INTERVAL", "3"))  # 같은 IP는 3초에 1건
 
 
-def check_rate(ip: str):
+# 시연장·학교처럼 여러 명이 같은 와이파이(= 같은 공인 IP)를 쓰면 IP 기준 제한에 서로 걸린다.
+# → 간격·중복은 기기(브라우저가 만든 X-Client-Id, 없으면 IP) 기준으로, IP 기준은 분당 상한만 넉넉하게.
+IP_PER_MIN = int(os.getenv("IP_PER_MIN", "60"))
+_ip_posts: dict[str, list] = {}
+
+
+def check_rate(who: str, ip: str):
     t = time.time()
-    if t - _last_post.get(ip, 0) < POST_INTERVAL:
+    if t - _last_post.get(who, 0) < POST_INTERVAL:
         raise HTTPException(429, "잠시 후 다시 시도해 주세요.")
-    _last_post[ip] = t
+    recent = [v for v in _ip_posts.get(ip, []) if t - v < 60]
+    if IP_PER_MIN and len(recent) >= IP_PER_MIN:
+        raise HTTPException(429, "등록이 너무 많아요. 잠시 후 다시 시도해 주세요.")
+    _last_post[who] = t
+    _ip_posts[ip] = recent + [t]
 
 
-# 같은 사람(IP)이 같은 칸에 같은 유형을 짧은 시간에 반복 등록하는 것(도배)만 막는다.
-# 시연장처럼 여러 명이 같은 와이파이(같은 IP)를 써도 서로 다른 칸·유형은 막히지 않게 일부러 좁게 잡음.
+# 같은 사람(기기)이 같은 칸에 같은 유형을 짧은 시간에 반복 등록하는 것(도배)만 막는다.
 DUP_WINDOW = float(os.getenv("DUP_WINDOW", "600"))  # 초
 _recent: dict[tuple, float] = {}
 
 
-def check_duplicate(ip: str, x: int, z: int, ctype: str):
+def check_duplicate(who: str, x: int, z: int, ctype: str):
     t = time.time()
     for k in [k for k, v in _recent.items() if t - v > DUP_WINDOW]:
         del _recent[k]
-    key = (ip, x, z, ctype)
+    key = (who, x, z, ctype)
     if DUP_WINDOW and key in _recent:
         raise HTTPException(409, "이미 같은 곳에 같은 제안을 하셨어요. 공감 버튼을 눌러 주세요.")
     _recent[key] = t
@@ -262,7 +271,8 @@ def list_complaints(since_id: int = 0, limit: int = 500):
 
 
 @app.post("/api/complaints", status_code=201)
-def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks):
+def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks,
+                     x_client_id: str | None = Header(default=None)):
     if body.type not in TYPES:
         raise HTTPException(400, f"알 수 없는 유형입니다: {body.type}")
     # 글 없이 유형만 골라도 등록된다. 목록·AI 요약에서 빈 칸이 되지 않게 유형 이름으로 채움
@@ -287,8 +297,9 @@ def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks):
         if n > heatmodel.MAX_CELLS:
             raise HTTPException(400, f"범위가 너무 넓어요. 블록 {heatmodel.MAX_CELLS}개 이하로 골라 주세요.")
     ip = request.client.host if request.client else "?"
-    check_rate(ip)
-    check_duplicate(ip, body.x, body.z, body.type)
+    who = (x_client_id or "")[:64] or ip  # 기기 구분 (같은 와이파이 여러 명이 서로 막히지 않게)
+    check_rate(who, ip)
+    check_duplicate(who, body.x, body.z, body.type)
     with _db_lock, db() as conn:
         cur = conn.execute(
             "INSERT INTO complaints (x, z, lat, lng, zone, type, text, created_at, x2, z2, shape, points)"
