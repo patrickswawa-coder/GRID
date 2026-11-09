@@ -36,6 +36,9 @@
   <!-- 동네 환경 리포트 -->
   <aside id="report" class="report" aria-label="동네 환경 리포트">
     <div class="report-head"><h2>📊 무실동 환경 리포트</h2><button id="report-close" class="x" type="button" aria-label="닫기">✕</button></div>
+    <a class="admin-link" href="admin/">
+      <span>🏛️</span><span><b>지자체 대시보드 보기</b><small>우리 동네 제안이 어떻게 분석되는지 확인해요</small></span><span>→</span>
+    </a>
     <section><h3>지금 날씨·공기</h3><div id="r-env" class="r-env">불러오는 중…</div></section>
     <section><h3>🔥 열이 많이 쌓이는 곳 TOP 3</h3><ol id="r-hot" class="r-list"></ol><p class="hint">누르면 그곳으로 이동해요</p></section>
     <section><h3>🌱 시민 제안 효과</h3><div id="r-sim"></div></section>
@@ -58,6 +61,7 @@
         <p class="muted-note">실제로 잰 온도가 아니라 <b>추정 지표</b>예요. 다음 단계로 위성 지표온도로 보정할 예정이에요. 기온·미세먼지는 기상청·에어코리아 실시간 값이에요.</p>
       </details>
       <button id="intro-ok" class="primary" type="button">시작하기</button>
+      <a class="intro-admin" href="admin/">🏛️ 지자체 대시보드 보기 →</a>
     </div>
   </div>
   <div id="envNow" class="env-now" hidden></div>
