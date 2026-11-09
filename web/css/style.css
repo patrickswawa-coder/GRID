@@ -233,6 +233,11 @@ body.sheet-open .tools { display: none; }
 .crosshair::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
 .probe.center { left: 50% !important; top: 50% !important; transform: translate(-50%, 22px); text-align: center; }
 body.sheet-open .probe, body.sheet-open .crosshair { display: none; }
+@media (max-width: 480px) {
+  /* 폰: 화면 가운데를 덜 가리게 조금 작게 */
+  .probe.center { font-size: 12px; padding: 5px 9px; transform: translate(-50%, 20px); }
+  .probe.center .v { font-size: 18px; }
+}
 
 /* ---- 지자체 대시보드 링크 (리포트 패널 아래, 도움말) */
 .admin-link {

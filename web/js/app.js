@@ -129,8 +129,7 @@ async function start() {
   setInterval(loadEnv, 10 * 60 * 1000);
   const { width: W, depth: D } = map.meta;
   $("#place").textContent = map.meta.name;
-  controls.target.set(W / 2, 0, D / 2);
-  camera.position.set(W / 2 + W * 0.35, Math.max(W, D) * 0.45, D / 2 + D * 0.55);
+  homeView();
   controls.maxDistance = Math.max(W, D) * 1.3;
   camera.far = Math.max(W, D) * 4;
   camera.updateProjectionMatrix();
@@ -515,10 +514,28 @@ $("#tool-labels").onclick = () => {
 };
 $("#tool-home").onclick = () => {
   if (!map) return;
-  const { width: W, depth: D } = map.meta;
-  controls.target.set(W / 2, 0, D / 2);
-  camera.position.set(W / 2 + W * 0.35, Math.max(W, D) * 0.45, D / 2 + D * 0.55);
+  homeView();
 };
+
+// 처음 화면: 지도 한가운데(무실동은 서쪽 절반이 숲)가 아니라 열이 많이 쌓이는 시가지를 중심으로.
+// 지수 60 이상 칸의 무게중심을 보고, 지도 전체가 아니라 시가지가 화면을 채우도록 조금 가깝게.
+let home = null;
+function homeView() {
+  const { width: W, depth: D } = map.meta;
+  if (!home) {
+    let sx = 0, sz = 0, n = 0;
+    if (heat) {
+      for (let z = 0; z < D; z += 2) for (let x = 0; x < W; x += 2) {
+        const v = heat.value[z * W + x];
+        if (v >= 60) { const w = v - 59; sx += x * w; sz += z * w; n += w; }
+      }
+    }
+    home = n ? { x: sx / n, z: sz / n, k: 0.6 } : { x: W / 2, z: D / 2, k: 1 };
+  }
+  const M = Math.max(W, D) * home.k;
+  controls.target.set(home.x, 0, home.z);
+  camera.position.set(home.x + M * 0.35, M * 0.45, home.z + M * 0.55);
+}
 $("#tool-help").onclick = () => { $("#intro").hidden = false; };
 $("#intro-ok").onclick = () => {
   $("#intro").hidden = true;
