@@ -123,7 +123,8 @@ async function start() {
   const zh = Object.entries(zoneHeat(map, heat)).sort((p, q) => q[1] - p[1]);
   $("#heatAvg").textContent = Math.round(baseAvg);
   $("#heatTop").textContent = `${nearestLabel(zh[0][0])} (${zh[0][1]})`;
-  if (new URLSearchParams(location.search).has("heat")) setHeat(true);
+  // 주제(환경데이터 시각화)상 열섬 지도는 기본으로 켠다. 재방문·QR 진입도 같게. ?noheat 이면 끈 채로 시작
+  if (!QS.has("noheat")) setHeat(true, true);
   loadEnv();
   setInterval(loadEnv, 10 * 60 * 1000);
   const { width: W, depth: D } = map.meta;
@@ -307,7 +308,9 @@ function selectCell(x, z) {
   const y = heightAt(map, x, z);
   cursor.position.set(x + 0.5, y, z + 0.5);
   cursor.visible = true;
-  $("#zone").textContent = `구역 ${zoneOf(map.meta, x, z)}`;
+  const zc = zoneOf(map.meta, x, z);
+  $("#zone").textContent = nearestLabel(zc);
+  $("#zone").title = `구역 ${zc}`;
   $("#heatInfo").innerHTML = heatHTML(x, z);
   closeDetail();
   openSheet();
@@ -322,7 +325,7 @@ function chooseType(code) {
   ghost.position.set(selected.x + 0.5, heightAt(map, selected.x, selected.z), selected.z + 0.5);
   markerRoot.add(ghost);
   const t = TYPE_BY_CODE[code];
-  $("#text").placeholder = t.group === "fix" ? `왜 여기에 ${t.label}이(가) 필요한지 짧게 적어 주세요` : `${t.label} 상황을 짧게 적어 주세요`;
+  $("#text").placeholder = t.group === "fix" ? `왜 여기에 필요한지 짧게 적어 주세요 (예: ${t.example || "그늘이 없어요"})` : `어떤 상황인지 짧게 적어 주세요`;
   showEffect(t);
   updateSubmit();
 }
@@ -344,7 +347,8 @@ function showEffect(t) {
   const after = scoreAt(map, x, z, buildMods(map, [{ type: t.code, x, z }], TYPE_BY_CODE));
   const d = Math.round(before) - Math.round(after);
   const m = (t.effect.size * (map.meta.cell || 5));
-  el.innerHTML = `${t.icon} ${t.desc} · 약 ${m}m×${m}m<br>놓으면 이 주변 열섬 지수 <b>${Math.round(before)} → ${Math.round(after)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})`;
+  const hint = d > 0 ? "" : before < 45 ? "<br><small>이곳은 이미 시원한 편이에요. 빨간 곳에 놓으면 효과가 커요</small>" : "";
+  el.innerHTML = `${t.icon} ${t.desc} · 약 ${m}m×${m}m<br>놓으면 이 주변 열섬 지수 <b>${Math.round(before)} → ${Math.round(after)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})${hint}`;
   const sz = t.effect.size;
   footprint.scale.set(sz, 1, sz);
   footprint.position.set(x + 0.5, (t.roofOnly ? heightAt(map, x, z) : 0) + 0.06, z + 0.5);
@@ -362,7 +366,11 @@ function liftView(sheetEl) {
   if (h) camera.setViewOffset(innerWidth, innerHeight, 0, h / 2, innerWidth, innerHeight);
   else camera.clearViewOffset();
 }
+function closeReportIfNarrow() {
+  if (innerWidth < 1100 && $("#report").classList.contains("open")) $("#tool-report").click();
+}
 function openSheet() {
+  closeReportIfNarrow();
   $("#sheet").classList.add("open");
   document.body.classList.add("sheet-open");
   liftView($("#sheet"));
@@ -417,11 +425,13 @@ $("#form").addEventListener("submit", async (e) => {
 // ---------------------------------------------------------------- 상세 카드
 let detailId = null;
 function showDetail(c) {
+  closeReportIfNarrow();
   closeSheet();
   detailId = c.id;
   const t = TYPE_BY_CODE[c.type] || TYPE_BY_CODE.other;
   $("#d-type").textContent = `${t.icon} ${t.label}`;
-  $("#d-zone").textContent = `구역 ${c.zone}`;
+  $("#d-zone").textContent = nearestLabel(c.zone);
+  $("#d-zone").title = `구역 ${c.zone}`;
   $("#d-heat").innerHTML = heatHTML(c.x, c.z);
   $("#d-text").textContent = c.text;
   $("#d-time").textContent = new Date(c.created_at).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
