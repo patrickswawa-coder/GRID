@@ -65,6 +65,9 @@ sudo systemctl enable -q grid-api
 sudo systemctl restart grid-api
 
 echo "▶ 6/6 nginx (80번 포트 하나: 시민 페이지 + /admin/ + /api)"
+if grep -q ssl_certificate /etc/nginx/sites-available/grid 2>/dev/null && [ -z "$FORCE_HTTP" ]; then
+  echo "   HTTPS 설정(enable_https.sh)이 있어 nginx 는 그대로 둡니다. (http 로 되돌리려면 FORCE_HTTP=1)"
+else
 sudo tee /etc/nginx/sites-available/grid >/dev/null <<'EOF'
 server {
     listen 80 default_server;
@@ -89,6 +92,7 @@ server {
 EOF
 sudo ln -sf /etc/nginx/sites-available/grid /etc/nginx/sites-enabled/grid
 sudo rm -f /etc/nginx/sites-enabled/default
+fi
 sudo nginx -t -q
 sudo systemctl reload nginx || sudo systemctl restart nginx
 
