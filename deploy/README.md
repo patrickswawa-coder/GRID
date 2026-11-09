@@ -5,7 +5,7 @@
 | 주소 | `32.190.9.9` (Ubuntu 24.04, 사용자 `ubuntu`) |
 | 접속 키 | `hackathon-e5-t07.pem` — 운영진이 준 7조 폴더에 있음. **GitHub·단톡방에 올리지 말 것** |
 | 시민 페이지 | http://32.190.9.9/ |
-| 대시보드 | http://32.190.9.9:8501/ |
+| 대시보드 | http://32.190.9.9/admin/ |
 | AI | Bedrock, 키 없이 서버 권한으로 호출. 기본 모델 Claude Haiku 4.5 |
 
 행사가 끝나면 서버가 삭제됩니다. 코드는 GitHub에 있으니 괜찮지만 **민원 DB(`~/GRID/backend/grid.db`)는 필요하면 미리 받아두기.**
@@ -35,7 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/patrickswawa-coder/GRID/main/deploy
 
 ## 자주 쓰는 명령 (서버 안에서)
 ```bash
-sudo systemctl status grid-api grid-dashboard --no-pager   # 상태
+sudo systemctl status grid-api --no-pager   # 상태
 sudo journalctl -u grid-api -n 50                          # API 로그
 curl -s localhost/api/ai/summary                           # AI 요약 동작 확인
 ```

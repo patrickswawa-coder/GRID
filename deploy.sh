@@ -4,7 +4,7 @@
 set -e
 cd ~/GRID
 git pull --ff-only
-.venv/bin/pip install -q -r backend/requirements.txt -r dashboard/requirements.txt
+.venv/bin/pip install -q -r backend/requirements.txt
 rsync -a --delete web/ /var/www/grid/
-sudo systemctl restart grid-api grid-dashboard
+sudo systemctl restart grid-api
 echo "배포 완료"

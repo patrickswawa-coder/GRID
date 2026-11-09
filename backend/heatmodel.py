@@ -179,6 +179,13 @@ def priority(complaints):
 _cache = {"key": None, "data": None}
 
 
+@router.get("/api/meta")
+def api_meta():
+    """지도 크기·구역 크기 (관리자 페이지가 구역 격자를 그릴 때 사용)"""
+    m = _load()["meta"]
+    return {k: m.get(k) for k in ("name", "width", "depth", "cell", "zone_size", "origin_lat", "origin_lng")}
+
+
 @router.get("/api/priority")
 def api_priority(limit: int = 30):
     from main import db  # 순환 import 방지

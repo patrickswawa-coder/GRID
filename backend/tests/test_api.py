@@ -111,3 +111,8 @@ def test_duplicate_same_cell_same_type_blocked():
     # 다른 유형이나 다른 칸은 그대로 등록됨
     assert client.post("/api/complaints", json={**body, "type": "tree"}).status_code == 201
     assert client.post("/api/complaints", json={**body, "x": 124}).status_code == 201
+
+
+def test_meta():
+    m = client.get("/api/meta").json()
+    assert m["zone_size"] > 0 and m["width"] > 0 and m["depth"] > 0

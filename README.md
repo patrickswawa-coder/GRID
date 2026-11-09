@@ -39,14 +39,14 @@ SERVE_WEB=1 AI_ENABLED=0 POST_INTERVAL=0 uvicorn main:app --reload --port 8000
 # Windows PowerShell
 $env:SERVE_WEB="1"; $env:AI_ENABLED="0"; $env:POST_INTERVAL="0"; uvicorn main:app --reload --port 8000
 ```
-→ 브라우저에서 http://localhost:8000
+→ 시민 페이지 http://localhost:8000 · **공무원 대시보드 http://localhost:8000/admin/** (같은 서버, 같은 포트)
 
 터미널 2 — 더미 민원 넣기 (선택)
 ```bash
 cd data && python seed_complaints.py --n 80
 ```
 
-터미널 3 — 대시보드
+터미널 3 — (선택) 예전 Streamlit 대시보드. 이제 `/admin/` 이 같은 기능을 하므로 보통 필요 없음
 ```bash
 streamlit run dashboard/app.py
 ```
