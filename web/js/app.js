@@ -185,10 +185,101 @@ async function start() {
   await poll();
   setInterval(poll, POLL_MS);
   $("#loading").remove();
+  if (SPOT_Q && enterSpot()) return; // 거리 QR: 안내 없이 바로 그 자리로
   let seen = false;
   try { seen = localStorage.getItem("grid-intro") === "1"; } catch {}
   if (!seen && !new URLSearchParams(location.search).has("demo")) $("#intro").hidden = false;
   else toast("바꾸고 싶은 위치를 눌러 주세요 👆", 3500);
+}
+
+// ---------------------------------------------------------------- 거리 QR 위치 모드
+// QR 주소: ?at=위도,경도&name=장소이름  (또는 ?x=칸&z=칸&name=…). data/make_qr.py --spots 로 만든다.
+// 들어오면 안내창 없이 그 자리로 가까이 가서 '지금 계신 곳' 핀과 [이곳에 의견 남기기] 카드를 보여준다.
+const SPOT_Q = (() => {
+  const name = (QS.get("name") || "").trim().slice(0, 30);
+  const at = QS.get("at");
+  if (at) {
+    const [la, ln] = at.split(",").map(Number);
+    if (Number.isFinite(la) && Number.isFinite(ln)) return { lat: la, lng: ln, name };
+  }
+  if (QS.has("x") && QS.has("z")) {
+    const x = Number(QS.get("x")), z = Number(QS.get("z"));
+    if (Number.isFinite(x) && Number.isFinite(z)) return { x, z, name };
+  }
+  return null;
+})();
+let spot = null;
+
+// QR이 건물 위를 가리키면 가장 가까운 길·인도 칸으로 (가로수·그늘막은 땅에 놓아야 효과가 있음)
+function snapToStreet(x, z) {
+  const { width: W, depth: D } = map.meta;
+  let best = null, bd = Infinity;
+  for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) {
+    const xx = x + dx, zz = z + dz;
+    if (xx < 0 || zz < 0 || xx >= W || zz >= D || heightAt(map, xx, zz) > 0) continue;
+    const g = map.ground[zz * W + xx];
+    const d = dx * dx + dz * dz + (g === 1 || g === 2 ? 0 : 40); // 길(1)·인도(2) 우선
+    if (d < bd) { bd = d; best = [xx, zz]; }
+  }
+  return best || [x, z];
+}
+
+function enterSpot() {
+  const m = map.meta;
+  let x, z;
+  if (SPOT_Q.lat != null) {
+    x = Math.floor(((SPOT_Q.lng - m.origin_lng) * 111320 * Math.cos((m.origin_lat * Math.PI) / 180)) / m.cell);
+    z = Math.floor(((m.origin_lat - SPOT_Q.lat) * 111320) / m.cell);
+  } else {
+    x = Math.floor(SPOT_Q.x); z = Math.floor(SPOT_Q.z);
+  }
+  if (x < 0 || z < 0 || x >= m.width || z >= m.depth) {
+    toast("QR 위치가 지도 밖이에요. 바꾸고 싶은 곳을 눌러 주세요", 4000);
+    return false;
+  }
+  [x, z] = snapToStreet(x, z);
+  spot = { x, z, name: SPOT_Q.name || nearestLabel(zoneOf(m, x, z)).replace(/ 주변$/, " 근처") };
+  flySpot();
+  showSpotCard();
+  return true;
+}
+
+function flySpot() {
+  focusTo = null;
+  controls.target.set(spot.x + 0.5, 0, spot.z + 0.5);
+  camera.position.set(spot.x + 0.5 + 55, 85, spot.z + 0.5 + 90); // 주변 골목까지 보이게
+}
+
+function showSpotCard() {
+  if (!spot) return;
+  const v = Math.round(heat.value[spot.z * map.meta.width + spot.x]);
+  const lv = heatLevel(v), dT = tempOffset(v);
+  $("#spotName").textContent = spot.name;
+  $("#spotHeat").innerHTML = `🌡️ 이곳 열섬 지수 <b style="color:${lv.color}">${v} ${lv.text}</b><br>` +
+    `여름 한낮엔 보통 지역보다 약 ${dT >= 0 ? "+" : "−"}${Math.abs(dT).toFixed(1)}°C <small>(추정)</small>`;
+  $("#spotCard").hidden = false;
+  document.body.classList.add("spot-open");
+}
+function hideSpotCard() {
+  $("#spotCard").hidden = true;
+  document.body.classList.remove("spot-open");
+}
+let spotFlow = false;
+$("#spotGo").onclick = () => { hideSpotCard(); spotFlow = true; selectCell(spot.x, spot.z); };
+$("#spotLook").onclick = () => { hideSpotCard(); toast("바꾸고 싶은 곳을 눌러 주세요 👆", 3000); };
+
+// 핀은 화면 좌표로 따라다니게 (3D 아이콘보다 멀리서도 잘 보임)
+const pinV = new THREE.Vector3();
+function updatePin() {
+  const el = $("#herePin");
+  if (!spot) return;
+  pinV.set(spot.x + 0.5, heightAt(map, spot.x, spot.z) + 1, spot.z + 0.5).project(camera);
+  const off = pinV.z > 1 || Math.abs(pinV.x) > 1.1 || Math.abs(pinV.y) > 1.1;
+  el.hidden = off;
+  if (!off) {
+    el.style.left = ((pinV.x + 1) / 2) * innerWidth + "px";
+    el.style.top = ((1 - pinV.y) / 2) * innerHeight + "px";
+  }
 }
 
 function loop() {
@@ -232,6 +323,7 @@ function loop() {
     }
   }
   if (labels) labels.update(camera, innerHeight, innerWidth);
+  if (spot) updatePin();
   updateProbe();
   renderer.render(scene, camera);
   checkPerf();
@@ -431,7 +523,7 @@ function selectCell(x, z) {
   cursor.position.set(x + 0.5, y, z + 0.5);
   cursor.visible = true;
   const zc = zoneOf(map.meta, x, z);
-  $("#zone").textContent = nearestLabel(zc);
+  $("#zone").textContent = spot && spot.x === x && spot.z === z ? spot.name : nearestLabel(zc);
   $("#zone").title = `구역 ${zc}`;
   $("#heatInfo").innerHTML = heatHTML(x, z);
   closeDetail();
@@ -446,7 +538,8 @@ function chooseType(code) {
   const t = TYPE_BY_CODE[code];
   $("#shapeBox").hidden = t.group !== "fix";
   if (t.group !== "fix") setShape("one", true);
-  $("#text").placeholder = t.group === "fix" ? `왜 여기에 필요한지 짧게 적어 주세요 (예: ${t.example || "그늘이 없어요"})` : `어떤 상황인지 짧게 적어 주세요`;
+  $("#text").placeholder = "(선택) 한 줄 의견 — 비워도 등록돼요";
+  buildChips(t);
   refreshPreview();
 }
 
@@ -546,7 +639,10 @@ function showEffect(t) {
   const after = scoreAt(map, x, z, buildMods(map, [{ type: t.code, x, z }], TYPE_BY_CODE));
   const d = Math.round(before) - Math.round(after);
   const m = (t.effect.size * (map.meta.cell || 5));
-  const hint = d > 0 ? "" : before < 45 ? "<br><small>이곳은 이미 시원한 편이에요. 빨간 곳에 놓으면 효과가 커요</small>" : "";
+  const hint = d > 0 ? ""
+    : before < 45 ? "<br><small>이곳은 이미 시원한 편이에요. 빨간 곳에 놓으면 효과가 커요</small>"
+    : before >= 99 ? "<br><small>지수가 가장 높은 구간이라 블록 하나로는 숫자가 그대로예요. 이런 곳일수록 제안이 여러 개 모여야 해요</small>"
+    : "";
   el.innerHTML = `${t.icon} ${t.desc} · 약 ${m}m×${m}m<br>놓으면 이 주변 열섬 지수 <b>${Math.round(before)} → ${Math.round(after)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})${hint}`;
   const sz = t.effect.size;
   footprint.scale.set(sz, 1, sz);
@@ -581,7 +677,29 @@ function showMultiEffect(t, el) {
 
 function updateSubmit() {
   const needEnd = shape !== "one" && !endCell;
-  $("#submit").disabled = !(selected && chosenType && $("#text").value.trim()) || needEnd || multiTooBig();
+  $("#submit").disabled = !(selected && chosenType) || needEnd || multiTooBig(); // 글은 선택 (비우면 유형 이름으로 등록)
+}
+
+// 빠른 문구: 거리에서 글쓰기 없이 한 번에 고를 수 있게
+const QUICK = {
+  fix: ["여름에 너무 더워요", "그늘이 없어요", "아이들이 많이 다녀요"],
+  trash: ["자주 쌓여 있어요", "냄새가 나요"], odor: ["매연이 심해요", "하수구 냄새가 나요"],
+  noise: ["밤에 시끄러워요", "공사 소음이 심해요"], other: ["위험해 보여요", "고쳐 주세요"],
+};
+function buildChips(t) {
+  const list = t.group === "fix" ? [t.example, ...QUICK.fix].filter(Boolean) : QUICK[t.code] || QUICK.other;
+  const box = $("#chips");
+  box.innerHTML = "";
+  for (const q of [...new Set(list)].slice(0, 4)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip-q"; b.textContent = q;
+    b.onclick = () => {
+      $("#text").value = $("#text").value.trim() === q ? "" : q;
+      box.querySelectorAll(".chip-q").forEach((c) => c.classList.toggle("on", c.textContent === $("#text").value));
+      updateSubmit();
+    };
+    box.append(b);
+  }
 }
 $("#text").addEventListener("input", updateSubmit);
 
@@ -660,7 +778,10 @@ function closeSheet() {
   setPeekHint(null);
   $("#shapeHint").hidden = true;
 }
-$("#cancel").onclick = closeSheet;
+$("#cancel").onclick = () => {
+  closeSheet();
+  if (spotFlow) { spotFlow = false; showSpotCard(); } // QR로 왔다가 취소하면 카드로 돌아감
+};
 
 $("#form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -688,8 +809,11 @@ $("#form").addEventListener("submit", async (e) => {
     $("#text").value = "";
     closeSheet();
     onProposalsChanged();
-    const n = expandCells(c).length;
-    toast(`등록됐어요! ${TYPE_BY_CODE[c.type].icon} ${TYPE_BY_CODE[c.type].label} 블록을 ${n > 1 ? n + "곳에 " : ""}놓았어요 🎉`);
+    const n = expandCells(c).length, where = n > 1 ? n + "곳에 " : "";
+    toast(spotFlow ? `등록됐어요! ${TYPE_BY_CODE[c.type].icon} ${where}지자체 대시보드에 바로 반영돼요 🎉`
+                   : `등록됐어요! ${TYPE_BY_CODE[c.type].icon} ${TYPE_BY_CODE[c.type].label} 블록을 ${where}놓았어요 🎉`, 3500);
+    spotFlow = false;
+    $("#chips").innerHTML = "";
   } catch (err) {
     toast(err.message);
   } finally {
@@ -800,6 +924,7 @@ $("#tool-labels").onclick = () => {
 };
 $("#tool-home").onclick = () => {
   if (!map) return;
+  if (spot) { flySpot(); showSpotCard(); return; } // QR로 왔으면 '처음 위치' = 지금 계신 곳
   homeView();
 };
 
