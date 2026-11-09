@@ -47,9 +47,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3f5; ove
   background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
   box-shadow: 0 -6px 24px rgba(0,0,0,.15);
-  transform: translateY(110%); transition: transform .25s ease;
+  transform: translateY(110%); transition: transform .38s cubic-bezier(.2,.8,.2,1);
 }
 .sheet.open { transform: translateY(0); }
+/* 접힌 상태: 위쪽(손잡이·제목·열섬 지수)만 보인다 */
+.sheet.open.peek { transform: translateY(calc(100% - var(--peek, 120px))); overflow: hidden; }
+.sheet.dragging { transition: none; }
+.sheet-top { cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.grabber { width: 42px; height: 5px; border-radius: 3px; background: #ced4da; margin: -6px auto 10px; }
+.peek-hint { display: none; text-align: center; font-size: 13px; font-weight: 700; color: var(--brand); margin: -2px 0 6px; }
+.sheet.peek .peek-hint { display: block; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .sheet h2 { font-size: 17px; margin: 0; }
 .chip { background: #eef3ff; color: var(--brand); font-weight: 600; font-size: 13px; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }

@@ -89,11 +89,37 @@ let ghost = null;
 let focusTo = null; // 카메라가 이동할 목표 지점
 const perf = { n: 0, t0: 0, done: false }; // 성능 측정
 
-const cursor = new THREE.LineSegments(
-  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.06, 1.06, 1.06).translate(0, 0.53, 0)),
-  new THREE.LineBasicMaterial({ color: 0xffd43b, depthTest: false })
+// 선택한 칸 표시: 열섬 색(초록~빨강)과 겹치지 않는 하늘색 — 테두리 상자 + 바닥 고리 + 위로 솟은 빛기둥
+const CURSOR_COLOR = 0x22c3ff;
+const cursor = new THREE.Group();
+const cursorBox = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.08, 1.08, 1.08).translate(0, 0.54, 0)),
+  new THREE.LineBasicMaterial({ color: CURSOR_COLOR, depthTest: false })
 );
-cursor.renderOrder = 20;
+const cursorRing = new THREE.Mesh(
+  new THREE.RingGeometry(1.1, 1.6, 40).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: CURSOR_COLOR, transparent: true, opacity: 0.9, depthTest: false })
+);
+cursorRing.position.y = 0.05;
+const cursorBeam = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.18, 0.18, 14, 12, 1, true).translate(0, 7, 0),
+  new THREE.MeshBasicMaterial({ color: CURSOR_COLOR, transparent: true, opacity: 0.45, depthWrite: false })
+);
+// 멀리서도 보이는 핀 (화면에서 항상 같은 크기)
+const cursorPin = (() => {
+  const cv = document.createElement("canvas"); cv.width = 128; cv.height = 160;
+  const g = cv.getContext("2d");
+  g.fillStyle = "#22c3ff"; g.strokeStyle = "#fff"; g.lineWidth = 10;
+  g.beginPath(); g.arc(64, 58, 48, Math.PI * 0.82, Math.PI * 2.18); g.lineTo(64, 150); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = "#fff"; g.beginPath(); g.arc(64, 58, 18, 0, Math.PI * 2); g.fill();
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+  sp.material.sizeAttenuation = false;
+  sp.center.set(0.5, 0); // 핀 끝이 바닥을 가리키게
+  sp.scale.set(0.04, 0.05, 1);
+  return sp;
+})();
+for (const o of [cursorBox, cursorRing, cursorBeam, cursorPin]) { o.renderOrder = 20; cursor.add(o); }
 cursor.visible = false;
 scene.add(cursor);
 
@@ -166,8 +192,15 @@ function loop() {
     camera.position.add(d);
     if (d.lengthSq() < 1e-4) focusTo = null;
   }
-  const s = 1 + 0.08 * Math.sin(performance.now() / 180);
-  cursor.scale.set(s, 1, s);
+  if (cursor.visible) {
+    // 멀리 볼수록 고리·빛기둥을 키워 화면에서 비슷한 크기로 보이게
+    const k = Math.max(1, camera.position.distanceTo(cursor.position) / 40);
+    const s = k * (1 + 0.18 * Math.sin(performance.now() / 220));
+    cursorRing.scale.set(s, 1, s);
+    const kb = Math.max(1, camera.position.distanceTo(cursor.position) / 120); // 빛기둥은 덜 키움
+    cursorBeam.scale.set(k * 0.6, kb, k * 0.6);
+    cursorPin.position.y = 14 * kb;
+  }
   for (const { obj } of markers.values()) {
     if (obj.userData.drop > 0) {
       obj.userData.drop = Math.max(0, obj.userData.drop - 0.6);
@@ -313,7 +346,8 @@ function selectCell(x, z) {
   $("#zone").title = `구역 ${zc}`;
   $("#heatInfo").innerHTML = heatHTML(x, z);
   closeDetail();
-  openSheet();
+  // 처음 누르면 작게(접힌 상태)만 올라오고, 이미 펼쳐서 쓰던 중이면 펼친 채로 유지
+  openSheet(!$("#sheet").classList.contains("open") || $("#sheet").classList.contains("peek"));
   if (chosenType) chooseType(chosenType);
 }
 
@@ -362,22 +396,65 @@ $("#text").addEventListener("input", updateSubmit);
 
 // 아래 시트가 화면을 가리는 만큼 3D 화면 중심을 위로 올린다
 function liftView(sheetEl) {
-  const h = sheetEl ? sheetEl.getBoundingClientRect().height : 0;
+  let h = sheetEl ? sheetEl.getBoundingClientRect().height : 0;
+  if (sheetEl && sheetEl.classList.contains("peek")) h = peekHeight();
   if (h) camera.setViewOffset(innerWidth, innerHeight, 0, h / 2, innerWidth, innerHeight);
   else camera.clearViewOffset();
 }
 function closeReportIfNarrow() {
   if (innerWidth < 1100 && $("#report").classList.contains("open")) $("#tool-report").click();
 }
-function openSheet() {
+// 접힌 상태에서 보일 높이 = 손잡이 ~ "눌러서 제안하기" 까지
+function peekHeight() {
+  const top = $("#sheet-top");
+  return top.offsetTop + top.offsetHeight + 4;
+}
+function setPeek(peek) {
+  const sh = $("#sheet");
+  sh.classList.toggle("peek", peek);
+  sh.style.setProperty("--peek", peekHeight() + "px");
+  sh.scrollTop = 0;
+  liftView(sh);
+}
+function openSheet(peek = true) {
   closeReportIfNarrow();
-  $("#sheet").classList.add("open");
+  const sh = $("#sheet");
+  sh.classList.add("open");
   document.body.classList.add("sheet-open");
-  liftView($("#sheet"));
+  setPeek(peek);
   focusTo = new THREE.Vector3(selected.x + 0.5, 0, selected.z + 0.5);
 }
+
+// 손잡이·제목 영역: 누르면 펼치기/접기, 위로 끌면 펼치기, 아래로 끌면 접기(접힌 상태면 닫기)
+(() => {
+  const top = $("#sheet-top"), sh = $("#sheet");
+  let y0 = null, moved = 0;
+  top.addEventListener("pointerdown", (e) => { y0 = e.clientY; moved = 0; top.setPointerCapture(e.pointerId); });
+  top.addEventListener("pointermove", (e) => {
+    if (y0 == null) return;
+    moved = e.clientY - y0;
+    if (Math.abs(moved) > 4) {
+      sh.classList.add("dragging");
+      const base = sh.classList.contains("peek") ? sh.offsetHeight - peekHeight() : 0;
+      sh.style.transform = `translateY(${Math.max(0, base + moved)}px)`;
+    }
+  });
+  const end = () => {
+    if (y0 == null) return;
+    y0 = null;
+    sh.classList.remove("dragging");
+    sh.style.transform = "";
+    const peek = sh.classList.contains("peek");
+    if (Math.abs(moved) <= 6) setPeek(!peek);          // 탭
+    else if (moved < -30) setPeek(false);              // 위로 끌기 → 펼치기
+    else if (moved > 30) peek ? closeSheet() : setPeek(true); // 아래로 끌기 → 접기 / 닫기
+  };
+  top.addEventListener("pointerup", end);
+  top.addEventListener("pointercancel", end);
+  top.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setPeek(!sh.classList.contains("peek")); } });
+})();
 function closeSheet() {
-  $("#sheet").classList.remove("open");
+  $("#sheet").classList.remove("open", "peek");
   document.body.classList.remove("sheet-open");
   liftView(null);
   cursor.visible = false;
