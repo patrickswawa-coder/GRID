@@ -327,6 +327,7 @@ function loop() {
   }
   if (labels) labels.update(camera, innerHeight, innerWidth);
   if (spot) updatePin();
+  if (!drawing) syncDrawControls();
   updateProbe();
   renderer.render(scene, camera);
   checkPerf();
@@ -520,7 +521,8 @@ function buildTypeButtons() {
   }
 }
 
-function selectCell(x, z) {
+// 시작 칸 표시만 바꾼다 (시트 열기 없이) — 탭 선택과 드래그 그리기가 같이 씀
+function setStart(x, z) {
   selected = { x, z };
   const y = heightAt(map, x, z);
   cursor.position.set(x + 0.5, y, z + 0.5);
@@ -529,6 +531,10 @@ function selectCell(x, z) {
   $("#zone").textContent = spot && spot.x === x && spot.z === z ? spot.name : nearestLabel(zc);
   $("#zone").title = `구역 ${zc}`;
   $("#heatInfo").innerHTML = heatHTML(x, z);
+}
+
+function selectCell(x, z) {
+  setStart(x, z);
   closeDetail();
   // 처음 누르면 작게(접힌 상태)만 올라오고, 이미 펼쳐서 쓰던 중이면 펼친 채로 유지
   openSheet(!$("#sheet").classList.contains("open") || $("#sheet").classList.contains("peek"));
@@ -560,7 +566,7 @@ function setShape(s, quiet = false) {
     refreshPreview();
     if (s === "one") { setPeekHint(null); setPeek(false); }
     if (s !== "one") {
-      toast(s === "line" ? "줄의 끝 위치를 지도에서 눌러 주세요 👆" : "네모의 반대쪽 모서리를 지도에서 눌러 주세요 👆", 3500);
+      toast(s === "line" ? "손가락으로 길을 따라 끌어서 줄을 그려 주세요 ✍️" : "손가락으로 끌어서 네모를 그려 주세요 ✍️", 3500);
       closeSheetPeek();
     }
   }
@@ -590,9 +596,54 @@ function setPeekHint(text) {
   if (el) el.textContent = text || PEEK_HINT;
 }
 function closeSheetPeek() {
-  setPeekHint(shape === "line" ? "👆 줄의 끝 위치를 지도에서 눌러 주세요" : "👆 네모의 반대쪽 모서리를 눌러 주세요");
+  setPeekHint(shape === "line" ? "✍️ 끌어서 줄 그리기 · 두 손가락으로 지도 이동" : "✍️ 끌어서 네모 그리기 · 두 손가락으로 지도 이동");
   setPeek(true);
 }
+
+// ---------------------------------------------------------------- 드래그로 줄·네모 그리기
+// 줄·네모를 고르고 시트가 접혀 있는 동안: 한 손가락(마우스 왼쪽) 끌기 = 그리기, 두 손가락(마우스 오른쪽) = 지도 이동
+// 끌지 않고 짧게 누르면 예전처럼 그 칸이 끝점이 된다 (탭 처리 쪽)
+const DEFAULT_ONE = controls.touches.ONE, DEFAULT_LEFT = controls.mouseButtons.LEFT;
+let drawing = null; // { id, sx, sy, start, moved }
+let drawRaf = 0;
+function drawMode() {
+  return !!(selected && chosenType && shape !== "one" && $("#sheet").classList.contains("peek"));
+}
+function syncDrawControls() {
+  const d = drawMode();
+  controls.touches.ONE = d ? -1 : DEFAULT_ONE;
+  controls.mouseButtons.LEFT = d ? -1 : DEFAULT_LEFT;
+  canvas.style.cursor = d ? "crosshair" : "";
+}
+function cellAt(px, py) {
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  return pickCell();
+}
+canvas.addEventListener("pointerdown", (e) => {
+  syncDrawControls();
+  if (drawing && e.pointerId !== drawing.id) { drawing = null; refreshPreview(); return; } // 두 번째 손가락 → 그리기 취소, 지도 조작
+  if (!drawMode() || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+  const start = cellAt(e.clientX, e.clientY);
+  if (start) drawing = { id: e.pointerId, sx: e.clientX, sy: e.clientY, start, moved: false };
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (!drawing || e.pointerId !== drawing.id) return;
+  if (!drawing.moved && Math.hypot(e.clientX - drawing.sx, e.clientY - drawing.sy) < 8) return;
+  if (!drawing.moved) { drawing.moved = true; setStart(drawing.start.x, drawing.start.z); }
+  const c = cellAt(e.clientX, e.clientY);
+  if (!c) return;
+  endCell = c;
+  if (!drawRaf) drawRaf = requestAnimationFrame(() => { drawRaf = 0; refreshPreview(); });
+});
+const endDraw = (e) => {
+  if (!drawing || e.pointerId !== drawing.id) return;
+  const d = drawing;
+  drawing = null;
+  if (d.moved && endCell) setEnd(endCell.x, endCell.z); // 줄 길이 제한·시트 펼치기
+};
+canvas.addEventListener("pointerup", endDraw);
+canvas.addEventListener("pointercancel", endDraw);
 
 // 미리보기(반투명 블록·끝점 커서·네모)와 효과 문구를 지금 상태로 다시 그린다
 function refreshPreview() {
@@ -658,7 +709,7 @@ function showMultiEffect(t, el) {
   const hint = $("#shapeHint");
   hint.hidden = true;
   if (!endCell) {
-    el.innerHTML = `${t.icon} ${shape === "line" ? "줄의 <b>끝 위치</b>" : "네모의 <b>반대쪽 모서리</b>"}를 지도에서 눌러 주세요 👆<br><small>노란 칸이 시작점이에요</small>`;
+    el.innerHTML = `${t.icon} 지도에서 손가락으로 <b>끌어서 ${shape === "line" ? "줄" : "네모"}를 그려</b> 주세요 ✍️<br><small>짧게 누르면 그 칸이 끝점이 돼요 · 두 손가락으로 지도 이동</small>`;
     return;
   }
   const cells = expandCells(draft());
@@ -675,7 +726,7 @@ function showMultiEffect(t, el) {
   const d = Math.round(b) - Math.round(a);
   const m = (map.meta.cell || 5) * Math.round(Math.hypot(endCell.x - selected.x, endCell.z - selected.z));
   const what = shape === "line" ? `약 ${m}m 구간에 ${t.label} <b>${cells.length}곳</b>` : `네모 영역에 ${t.label} <b>${cells.length}곳</b>`;
-  el.innerHTML = `${t.icon} ${what}<br>놓으면 이 구간 열섬 지수 평균 <b>${Math.round(b)} → ${Math.round(a)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})<br><small>지도를 다시 누르면 끝점이 바뀌어요 · 제안 1건으로 등록돼요</small>`;
+  el.innerHTML = `${t.icon} ${what}<br>놓으면 이 구간 열섬 지수 평균 <b>${Math.round(b)} → ${Math.round(a)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})<br><small>다시 그리려면 위에서 줄·네모를 한 번 더 눌러 주세요 · 제안 1건으로 등록돼요</small>`;
 }
 
 function updateSubmit() {
