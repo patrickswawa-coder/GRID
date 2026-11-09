@@ -94,7 +94,7 @@
       <div id="shapeBox" class="shape-box" hidden>
         <div class="seg" role="group" aria-label="놓는 방식">
           <button type="button" data-shape="one" class="on">📍 한 곳</button>
-          <button type="button" data-shape="line">➖ 줄로 여러 개</button>
+          <button type="button" data-shape="path">✍️ 자유 그리기</button>
           <button type="button" data-shape="area">⬜ 네모 영역</button>
         </div>
         <div id="shapeHint" class="shape-hint" hidden></div>
@@ -102,6 +102,7 @@
       <div class="types-title">📢 환경 불편 신고</div>
       <div id="types-report" class="types small"></div>
       <div id="effectInfo" class="effect-info"></div>
+      <div id="chips" class="chips"></div>
       <textarea id="text" maxlength="200" rows="2" placeholder="먼저 위에서 유형을 골라 주세요"></textarea>
       <div class="actions">
         <button type="button" id="cancel" class="ghost">취소</button>
@@ -125,6 +126,15 @@
       <button type="button" id="d-close" class="ghost">닫기</button>
       <button type="button" id="d-like" class="primary">👍 공감</button>
     </div>
+  </section>
+
+  <!-- 거리 QR로 들어왔을 때: 지금 계신 곳 -->
+  <div id="herePin" class="here-pin" hidden>📍<span>지금 계신 곳</span></div>
+  <section id="spotCard" class="spot-card" hidden aria-label="지금 계신 곳">
+    <div class="spot-name">📍 <b id="spotName"></b></div>
+    <div id="spotHeat" class="spot-heat"></div>
+    <button id="spotGo" class="primary" type="button">이곳에 의견 남기기</button>
+    <button id="spotLook" class="ghost" type="button">동네 둘러보기</button>
   </section>
 
   <div id="toast" class="toast" role="status"></div>

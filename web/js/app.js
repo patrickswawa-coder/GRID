@@ -6,7 +6,7 @@ import { makeMarker } from "./markers.js";
 import { loadLabels } from "./labels.js";
 import { computeHeat, paintHeat, heatLevel, zoneHeat, scoreAt, buildMods, meanHeat, heatRGB } from "./heat.js";
 import { TYPES, TYPE_BY_CODE, FIX_TYPES, REPORT_TYPES } from "./types.js";
-import { expandCells, expandAll, isMulti, MAX_CELLS, STEP } from "./shape.js";
+import { expandCells, expandAll, isMulti, pathLength, MAX_CELLS, MAX_POINTS } from "./shape.js";
 
 const API = window.GRID_API || ""; // 같은 서버면 빈 문자열
 const POLL_MS = 8000;
@@ -87,8 +87,9 @@ let lastId = 0;
 let selected = null; // { x, z }
 let chosenType = null;
 let ghost = null;
-let shape = "one"; // 놓는 방식: one(한 곳) / line(줄) / area(네모)
-let endCell = null; // 줄의 끝점·네모의 반대 모서리 { x, z }
+let shape = "one"; // 놓는 방식: one(한 곳) / path(자유 그리기) / area(네모)
+let endCell = null; // 네모의 반대 모서리 { x, z }
+let pathPts = []; // 자유 그리기로 지나간 칸 [[x, z], ...] (첫 점 = 시작점)
 let focusTo = null; // 카메라가 이동할 목표 지점
 const perf = { n: 0, t0: 0, done: false }; // 성능 측정
 
@@ -185,10 +186,104 @@ async function start() {
   await poll();
   setInterval(poll, POLL_MS);
   $("#loading").remove();
+  if (SPOT_Q && enterSpot()) return; // 거리 QR: 안내 없이 바로 그 자리로
   let seen = false;
   try { seen = localStorage.getItem("grid-intro") === "1"; } catch {}
   if (!seen && !new URLSearchParams(location.search).has("demo")) $("#intro").hidden = false;
   else toast("바꾸고 싶은 위치를 눌러 주세요 👆", 3500);
+}
+
+// ---------------------------------------------------------------- 거리 QR 위치 모드
+// QR 주소: ?at=위도,경도&name=장소이름  (또는 ?x=칸&z=칸&name=…). data/make_qr.py --spots 로 만든다.
+// 들어오면 안내창 없이 그 자리로 가까이 가서 '지금 계신 곳' 핀과 [이곳에 의견 남기기] 카드를 보여준다.
+const SPOT_Q = (() => {
+  const name = (QS.get("name") || "").trim().slice(0, 30);
+  const at = QS.get("at");
+  if (at) {
+    const [la, ln] = at.split(",").map(Number);
+    if (Number.isFinite(la) && Number.isFinite(ln)) return { lat: la, lng: ln, name };
+  }
+  if (QS.has("x") && QS.has("z")) {
+    const x = Number(QS.get("x")), z = Number(QS.get("z"));
+    if (Number.isFinite(x) && Number.isFinite(z)) return { x, z, name };
+  }
+  return null;
+})();
+let spot = null;
+
+// QR이 건물 위를 가리키면 가장 가까운 길·인도 칸으로 (가로수·그늘막은 땅에 놓아야 효과가 있음)
+function snapToStreet(x, z) {
+  const { width: W, depth: D } = map.meta;
+  let best = null, bd = Infinity;
+  for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) {
+    const xx = x + dx, zz = z + dz;
+    if (xx < 0 || zz < 0 || xx >= W || zz >= D || heightAt(map, xx, zz) > 0) continue;
+    const g = map.ground[zz * W + xx];
+    const d = dx * dx + dz * dz + (g === 1 || g === 2 ? 0 : 40); // 길(1)·인도(2) 우선
+    if (d < bd) { bd = d; best = [xx, zz]; }
+  }
+  return best || [x, z];
+}
+
+function enterSpot() {
+  const m = map.meta;
+  let x, z;
+  if (SPOT_Q.lat != null) {
+    x = Math.floor(((SPOT_Q.lng - m.origin_lng) * 111320 * Math.cos((m.origin_lat * Math.PI) / 180)) / m.cell);
+    z = Math.floor(((m.origin_lat - SPOT_Q.lat) * 111320) / m.cell);
+  } else {
+    x = Math.floor(SPOT_Q.x); z = Math.floor(SPOT_Q.z);
+  }
+  if (x < 0 || z < 0 || x >= m.width || z >= m.depth) {
+    toast("QR 위치가 지도 밖이에요. 바꾸고 싶은 곳을 눌러 주세요", 4000);
+    return false;
+  }
+  [x, z] = snapToStreet(x, z);
+  spot = { x, z, name: SPOT_Q.name || nearestLabel(zoneOf(m, x, z)).replace(/ 주변$/, " 근처") };
+  flySpot();
+  showSpotCard();
+  return true;
+}
+
+function flySpot() {
+  focusTo = null;
+  controls.target.set(spot.x + 0.5, 0, spot.z + 0.5);
+  camera.position.set(spot.x + 0.5 + 55, 85, spot.z + 0.5 + 90); // 주변 골목까지 보이게
+}
+
+function showSpotCard() {
+  if (!spot) return;
+  const v = Math.round(heat.value[spot.z * map.meta.width + spot.x]);
+  const lv = heatLevel(v), dT = tempOffset(v);
+  $("#spotName").textContent = spot.name;
+  $("#spotHeat").innerHTML = `🌡️ 이곳 열섬 지수 <b style="color:${lv.color}">${v} ${lv.text}</b><br>` +
+    `여름 한낮엔 보통 지역보다 약 ${dT >= 0 ? "+" : "−"}${Math.abs(dT).toFixed(1)}°C <small>(추정)</small>`;
+  $("#spotCard").hidden = false;
+  document.body.classList.add("spot-open");
+}
+function hideSpotCard() {
+  $("#spotCard").hidden = true;
+  document.body.classList.remove("spot-open");
+}
+let spotFlow = false;
+$("#spotGo").onclick = () => {
+  hideSpotCard(); spotFlow = true; selectCell(spot.x, spot.z);
+  setPeek(false); // 이미 '의견 남기기'를 눌렀으니 접힌 상태가 아니라 바로 펼쳐서
+};
+$("#spotLook").onclick = () => { hideSpotCard(); toast("바꾸고 싶은 곳을 눌러 주세요 👆", 3000); };
+
+// 핀은 화면 좌표로 따라다니게 (3D 아이콘보다 멀리서도 잘 보임)
+const pinV = new THREE.Vector3();
+function updatePin() {
+  const el = $("#herePin");
+  if (!spot) return;
+  pinV.set(spot.x + 0.5, heightAt(map, spot.x, spot.z) + 1, spot.z + 0.5).project(camera);
+  const off = pinV.z > 1 || Math.abs(pinV.x) > 1.1 || Math.abs(pinV.y) > 1.1;
+  el.hidden = off;
+  if (!off) {
+    el.style.left = ((pinV.x + 1) / 2) * innerWidth + "px";
+    el.style.top = ((1 - pinV.y) / 2) * innerHeight + "px";
+  }
 }
 
 function loop() {
@@ -232,6 +327,8 @@ function loop() {
     }
   }
   if (labels) labels.update(camera, innerHeight, innerWidth);
+  if (spot) updatePin();
+  if (!drawing) syncDrawControls();
   updateProbe();
   renderer.render(scene, camera);
   checkPerf();
@@ -325,12 +422,15 @@ async function syncState() {
 function makeGroupMarker(c, ghostMode = false) {
   const cells = expandCells(c);
   const g = new THREE.Group();
-  const yaw = c.shape === "line" ? -Math.atan2(c.z2 - c.z, c.x2 - c.x) : 0; // 모형 줄 방향을 길 방향으로
+  const along = c.shape === "line" || c.shape === "path"; // 모형 줄 방향을 길 방향으로
   cells.forEach((p, i) => {
     const m = makeMarker(c.type, { ghost: ghostMode });
     if (i > 0) m.remove(m.userData.sprite);
     m.position.set(p.x + 0.5, heightAt(map, p.x, p.z), p.z + 0.5);
-    m.rotation.y = yaw;
+    if (along && cells.length > 1) {
+      const a = cells[Math.max(0, i - 1)], b = cells[Math.min(cells.length - 1, i + 1)];
+      m.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
+    }
     g.add(m);
     if (i === 0) g.userData.sprite = m.userData.sprite;
   });
@@ -370,7 +470,7 @@ function onTap(px, py) {
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
 
-  // 0) 줄·네모로 놓는 중이면 누른 칸이 끝점
+  // 0) 자유 그리기·네모로 놓는 중이면: 길은 그 칸까지 잇고, 네모는 반대쪽 모서리
   if (selected && chosenType && shape !== "one") {
     const c = pickCell();
     if (c) setEnd(c.x, c.z);
@@ -448,15 +548,20 @@ function buildTypeButtons() {
   }
 }
 
-function selectCell(x, z) {
+// 시작 칸 표시만 바꾼다 (시트 열기 없이) — 탭 선택과 드래그 그리기가 같이 씀
+function setStart(x, z) {
   selected = { x, z };
   const y = heightAt(map, x, z);
   cursor.position.set(x + 0.5, y, z + 0.5);
   cursor.visible = true;
   const zc = zoneOf(map.meta, x, z);
-  $("#zone").textContent = nearestLabel(zc);
+  $("#zone").textContent = spot && spot.x === x && spot.z === z ? spot.name : nearestLabel(zc);
   $("#zone").title = `구역 ${zc}`;
   $("#heatInfo").innerHTML = heatHTML(x, z);
+}
+
+function selectCell(x, z) {
+  setStart(x, z);
   closeDetail();
   // 처음 누르면 작게(접힌 상태)만 올라오고, 이미 펼쳐서 쓰던 중이면 펼친 채로 유지
   openSheet(!$("#sheet").classList.contains("open") || $("#sheet").classList.contains("peek"));
@@ -469,69 +574,165 @@ function chooseType(code) {
   const t = TYPE_BY_CODE[code];
   $("#shapeBox").hidden = t.group !== "fix";
   if (t.group !== "fix") setShape("one", true);
-  $("#text").placeholder = t.group === "fix" ? `왜 여기에 필요한지 짧게 적어 주세요 (예: ${t.example || "그늘이 없어요"})` : `어떤 상황인지 짧게 적어 주세요`;
+  $("#text").placeholder = "(선택) 한 줄 의견 — 비워도 등록돼요";
+  buildChips(t);
   refreshPreview();
 }
 
-// ---------------------------------------------------------------- 여러 칸에 놓기 (줄·네모)
+// ---------------------------------------------------------------- 여러 칸에 놓기 (자유 그리기·네모)
+// shape "path": 손가락이 지나간 길(pathPts)을 따라 블록 / "area": 시작점~endCell 네모 안을 채움
 function draft() {
   const d = { type: chosenType, x: selected.x, z: selected.z };
-  if (shape !== "one" && endCell) Object.assign(d, { shape, x2: endCell.x, z2: endCell.z });
+  if (shape === "path" && pathPts.length >= 2) Object.assign(d, { shape, points: pathPts });
+  if (shape === "area" && endCell) Object.assign(d, { shape, x2: endCell.x, z2: endCell.z });
   return d;
+}
+function multiReady() {
+  return shape === "path" ? pathPts.length >= 2 : shape === "area" ? !!endCell : true;
 }
 function setShape(s, quiet = false) {
   shape = s;
   endCell = null;
+  pathPts = [];
   document.querySelectorAll("#shapeBox .seg button").forEach((b) => b.classList.toggle("on", b.dataset.shape === s));
   if (!quiet) {
     refreshPreview();
     if (s === "one") { setPeekHint(null); setPeek(false); }
-    if (s !== "one") {
-      toast(s === "line" ? "줄의 끝 위치를 지도에서 눌러 주세요 👆" : "네모의 반대쪽 모서리를 지도에서 눌러 주세요 👆", 3500);
+    else {
+      toast(s === "path" ? "손가락으로 길을 따라 끌어서 그려 주세요 ✍️" : "손가락으로 대각선으로 끌어서 네모를 그려 주세요 ✍️", 3500);
       closeSheetPeek();
     }
   }
 }
 document.querySelectorAll("#shapeBox .seg button").forEach((b) => { b.onclick = () => setShape(b.dataset.shape); });
-function setEnd(x, z) {
-  // 줄이 너무 길면 같은 방향으로 최대 길이까지만
-  if (shape === "line") {
-    const d = { type: chosenType, x: selected.x, z: selected.z, x2: x, z2: z, shape };
-    if (expandCells(d).length > MAX_CELLS) {
-      const dx = x - selected.x, dz = z - selected.z, len = Math.hypot(dx, dz);
-      const maxLen = (MAX_CELLS - 1) * (STEP[chosenType] || 3);
-      x = selected.x + Math.trunc((dx * maxLen) / len);
-      z = selected.z + Math.trunc((dz * maxLen) / len);
-      toast(`한 번에 ${MAX_CELLS}곳까지라 길이를 줄였어요`);
-    }
-  }
-  endCell = { x, z };
+
+// 길에 점 하나를 더한다. 블록이 너무 많아지면 더하지 않고 false
+function addPathPoint(c) {
+  const last = pathPts[pathPts.length - 1];
+  if (last && last[0] === c.x && last[1] === c.z) return true;
+  const next = pathPts.length ? [...pathPts, [c.x, c.z]] : [[selected.x, selected.z], [c.x, c.z]];
+  if (next.length > MAX_POINTS) return false;
+  if (next.length >= 2 && expandCells({ type: chosenType, x: next[0][0], z: next[0][1], shape: "path", points: next }).length > MAX_CELLS) return false;
+  pathPts = next;
+  return true;
+}
+// 그리기를 마치면 시트를 펼쳐 효과·의견 입력을 보여준다
+function finishDraw() {
   setPeekHint(null);
   setPeek(false);
   refreshPreview();
 }
-// 끝점을 고르는 동안은 시트를 접어(#29 의 접기 기능) 지도를 넓게 보여주고, 접힌 곳 안내 문구를 바꾼다
+// 끌지 않고 지도를 짧게 누른 경우: 자유 그리기는 그 칸까지 곧게 잇고, 네모는 반대쪽 모서리로
+function setEnd(x, z) {
+  if (shape === "path") {
+    if (!addPathPoint({ x, z })) { toast(`한 번에 ${MAX_CELLS}곳까지예요`); return; }
+  } else {
+    endCell = { x, z };
+  }
+  finishDraw();
+}
+// 그리는 동안은 시트를 접어(#29 의 접기 기능) 지도를 넓게 보여주고, 접힌 곳 안내 문구를 바꾼다
 const PEEK_HINT = $(".peek-hint")?.textContent || "";
 function setPeekHint(text) {
   const el = $(".peek-hint");
   if (el) el.textContent = text || PEEK_HINT;
 }
 function closeSheetPeek() {
-  setPeekHint(shape === "line" ? "👆 줄의 끝 위치를 지도에서 눌러 주세요" : "👆 네모의 반대쪽 모서리를 눌러 주세요");
+  setPeekHint(shape === "path" ? "✍️ 끌어서 길 그리기 · 두 손가락으로 지도 이동" : "✍️ 끌어서 네모 그리기 · 두 손가락으로 지도 이동");
   setPeek(true);
 }
 
-// 미리보기(반투명 블록·끝점 커서·네모)와 효과 문구를 지금 상태로 다시 그린다
+// ---------------------------------------------------------------- 손가락으로 그리기
+// 자유 그리기·네모를 고르고 시트가 접혀 있는 동안: 한 손가락(마우스 왼쪽) 끌기 = 그리기, 두 손가락(마우스 오른쪽) = 지도 이동
+const DEFAULT_ONE = controls.touches.ONE, DEFAULT_LEFT = controls.mouseButtons.LEFT;
+let drawing = null; // { id, sx, sy, start, moved, capped }
+let drawRaf = 0;
+function drawMode() {
+  return !!(selected && chosenType && shape !== "one" && $("#sheet").classList.contains("peek"));
+}
+function syncDrawControls() {
+  const d = drawMode();
+  controls.touches.ONE = d ? -1 : DEFAULT_ONE;
+  controls.mouseButtons.LEFT = d ? -1 : DEFAULT_LEFT;
+  canvas.style.cursor = d ? "crosshair" : "";
+}
+function cellAt(px, py) {
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  return pickCell();
+}
+function schedulePreview() {
+  if (!drawRaf) drawRaf = requestAnimationFrame(() => { drawRaf = 0; refreshPreview(); });
+}
+canvas.addEventListener("pointerdown", (e) => {
+  syncDrawControls();
+  if (drawing && e.pointerId !== drawing.id) { // 두 번째 손가락 → 그리던 것 취소, 지도 조작
+    drawing = null; pathPts = []; endCell = null; refreshPreview(); return;
+  }
+  if (!drawMode() || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
+  const start = cellAt(e.clientX, e.clientY);
+  if (start) drawing = { id: e.pointerId, sx: e.clientX, sy: e.clientY, start, moved: false, capped: false };
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (!drawing || e.pointerId !== drawing.id) return;
+  if (!drawing.moved && Math.hypot(e.clientX - drawing.sx, e.clientY - drawing.sy) < 8) return;
+  if (!drawing.moved) { // 끌기 시작: 누른 곳이 새 시작점
+    drawing.moved = true;
+    setStart(drawing.start.x, drawing.start.z);
+    pathPts = [[drawing.start.x, drawing.start.z]];
+    endCell = null;
+  }
+  const c = cellAt(e.clientX, e.clientY);
+  if (!c) return;
+  if (shape === "area") endCell = c;
+  else if (!drawing.capped && !addPathPoint(c)) {
+    drawing.capped = true;
+    toast(`한 번에 ${MAX_CELLS}곳까지예요. 여기서 멈출게요`);
+  }
+  schedulePreview();
+});
+const endDraw = (e) => {
+  if (!drawing || e.pointerId !== drawing.id) return;
+  const d = drawing;
+  drawing = null;
+  if (!d.moved) return; // 짧게 누른 건 탭 처리 쪽에서
+  if (multiReady()) finishDraw();
+  else { toast("조금 더 길게 그려 주세요 ✍️"); refreshPreview(); }
+};
+canvas.addEventListener("pointerup", endDraw);
+canvas.addEventListener("pointercancel", endDraw);
+
+// 그린 길 미리보기 선 (지형 위에 뜨게)
+const pathLine = new THREE.Line(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color: 0xffd43b, depthTest: false, transparent: true, opacity: 0.95 })
+);
+pathLine.renderOrder = 21;
+pathLine.visible = false;
+scene.add(pathLine);
+function drawPathLine() {
+  if (shape !== "path" || pathPts.length < 2) { pathLine.visible = false; return; }
+  const arr = new Float32Array(pathPts.length * 3);
+  pathPts.forEach(([x, z], i) => arr.set([x + 0.5, heightAt(map, x, z) + 0.3, z + 0.5], i * 3));
+  pathLine.geometry.dispose();
+  pathLine.geometry = new THREE.BufferGeometry();
+  pathLine.geometry.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+  pathLine.visible = true;
+}
+
+// 미리보기(반투명 블록·끝 표시·네모·길)와 효과 문구를 지금 상태로 다시 그린다
 function refreshPreview() {
   if (ghost) markerRoot.remove(ghost);
   ghost = null;
   endCursor.visible = false;
   areaBox.visible = false;
+  drawPathLine();
   if (!selected || !chosenType) return;
   const d = draft();
   if (isMulti(d)) {
     ghost = makeGroupMarker(d, true);
-    endCursor.position.set(endCell.x + 0.5, heightAt(map, endCell.x, endCell.z), endCell.z + 0.5);
+    const end = shape === "path" ? { x: pathPts[pathPts.length - 1][0], z: pathPts[pathPts.length - 1][1] } : endCell;
+    endCursor.position.set(end.x + 0.5, heightAt(map, end.x, end.z), end.z + 0.5);
     endCursor.visible = true;
     if (shape === "area") {
       const x0 = Math.min(d.x, d.x2), x1 = Math.max(d.x, d.x2) + 1, z0 = Math.min(d.z, d.z2), z1 = Math.max(d.z, d.z2) + 1;
@@ -548,7 +749,7 @@ function refreshPreview() {
   updateSubmit();
 }
 function multiTooBig() {
-  return selected && chosenType && shape !== "one" && endCell && expandCells(draft()).length > MAX_CELLS;
+  return selected && chosenType && shape !== "one" && multiReady() && expandCells(draft()).length > MAX_CELLS;
 }
 
 // 놓기 전에 "이 블록 하나로 주변 지수가 얼마나 내려가는지" 계산해 보여준다
@@ -569,7 +770,10 @@ function showEffect(t) {
   const after = scoreAt(map, x, z, buildMods(map, [{ type: t.code, x, z }], TYPE_BY_CODE));
   const d = Math.round(before) - Math.round(after);
   const m = (t.effect.size * (map.meta.cell || 5));
-  const hint = d > 0 ? "" : before < 45 ? "<br><small>이곳은 이미 시원한 편이에요. 빨간 곳에 놓으면 효과가 커요</small>" : "";
+  const hint = d > 0 ? ""
+    : before < 45 ? "<br><small>이곳은 이미 시원한 편이에요. 빨간 곳에 놓으면 효과가 커요</small>"
+    : before >= 99 ? "<br><small>지수가 가장 높은 구간이라 블록 하나로는 숫자가 그대로예요. 이런 곳일수록 제안이 여러 개 모여야 해요</small>"
+    : "";
   el.innerHTML = `${t.icon} ${t.desc} · 약 ${m}m×${m}m<br>놓으면 이 주변 열섬 지수 <b>${Math.round(before)} → ${Math.round(after)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})${hint}`;
   const sz = t.effect.size;
   footprint.scale.set(sz, 1, sz);
@@ -577,12 +781,14 @@ function showEffect(t) {
   footprint.visible = true;
 }
 
-// 줄·네모: 블록 수와, 놓이는 칸들의 평균 지수가 얼마나 내려가는지
+// 자유 그리기·네모: 블록 수와, 놓이는 칸들의 평균 지수가 얼마나 내려가는지
 function showMultiEffect(t, el) {
   const hint = $("#shapeHint");
   hint.hidden = true;
-  if (!endCell) {
-    el.innerHTML = `${t.icon} ${shape === "line" ? "줄의 <b>끝 위치</b>" : "네모의 <b>반대쪽 모서리</b>"}를 지도에서 눌러 주세요 👆<br><small>노란 칸이 시작점이에요</small>`;
+  if (!multiReady()) {
+    el.innerHTML = shape === "path"
+      ? `${t.icon} 지도에서 손가락으로 <b>길을 따라 끌어서</b> 그려 주세요 ✍️<br><small>짧게 누르면 그 칸까지 곧게 이어져요 · 두 손가락으로 지도 이동</small>`
+      : `${t.icon} 지도에서 손가락으로 <b>대각선으로 끌어서</b> 네모를 그려 주세요 ✍️<br><small>두 손가락으로 지도 이동</small>`;
     return;
   }
   const cells = expandCells(draft());
@@ -597,14 +803,38 @@ function showMultiEffect(t, el) {
   for (const p of cells) { b += scoreAt(map, p.x, p.z); a += scoreAt(map, p.x, p.z, mods); }
   b /= cells.length; a /= cells.length;
   const d = Math.round(b) - Math.round(a);
-  const m = (map.meta.cell || 5) * Math.round(Math.hypot(endCell.x - selected.x, endCell.z - selected.z));
-  const what = shape === "line" ? `약 ${m}m 구간에 ${t.label} <b>${cells.length}곳</b>` : `네모 영역에 ${t.label} <b>${cells.length}곳</b>`;
-  el.innerHTML = `${t.icon} ${what}<br>놓으면 이 구간 열섬 지수 평균 <b>${Math.round(b)} → ${Math.round(a)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})<br><small>지도를 다시 누르면 끝점이 바뀌어요 · 제안 1건으로 등록돼요</small>`;
+  const cell = map.meta.cell || 5;
+  const what = shape === "path"
+    ? `그린 길 약 ${Math.round(pathLength(pathPts) * cell)}m에 ${t.label} <b>${cells.length}곳</b>`
+    : `가로 ${(Math.abs(endCell.x - selected.x) + 1) * cell}m × 세로 ${(Math.abs(endCell.z - selected.z) + 1) * cell}m 네모에 ${t.label} <b>${cells.length}곳</b>`;
+  const more = shape === "path" ? "지도를 누르면 그 칸까지 길이 이어져요 · " : "";
+  el.innerHTML = `${t.icon} ${what}<br>놓으면 이 구간 열섬 지수 평균 <b>${Math.round(b)} → ${Math.round(a)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})<br><small>${more}다시 그리려면 위 버튼을 한 번 더 눌러 주세요 · 제안 1건으로 등록돼요</small>`;
 }
 
 function updateSubmit() {
-  const needEnd = shape !== "one" && !endCell;
-  $("#submit").disabled = !(selected && chosenType && $("#text").value.trim()) || needEnd || multiTooBig();
+  $("#submit").disabled = !(selected && chosenType) || !multiReady() || multiTooBig(); // 글은 선택 (비우면 유형 이름으로 등록)
+}
+
+// 빠른 문구: 거리에서 글쓰기 없이 한 번에 고를 수 있게
+const QUICK = {
+  fix: ["여름에 너무 더워요", "그늘이 없어요", "아이들이 많이 다녀요"],
+  trash: ["자주 쌓여 있어요", "냄새가 나요"], odor: ["매연이 심해요", "하수구 냄새가 나요"],
+  noise: ["밤에 시끄러워요", "공사 소음이 심해요"], other: ["위험해 보여요", "고쳐 주세요"],
+};
+function buildChips(t) {
+  const list = t.group === "fix" ? [t.example, ...QUICK.fix].filter(Boolean) : QUICK[t.code] || QUICK.other;
+  const box = $("#chips");
+  box.innerHTML = "";
+  for (const q of [...new Set(list)].slice(0, 4)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip-q"; b.textContent = q;
+    b.onclick = () => {
+      $("#text").value = $("#text").value.trim() === q ? "" : q;
+      box.querySelectorAll(".chip-q").forEach((c) => c.classList.toggle("on", c.textContent === $("#text").value));
+      updateSubmit();
+    };
+    box.append(b);
+  }
 }
 $("#text").addEventListener("input", updateSubmit);
 
@@ -680,10 +910,14 @@ function closeSheet() {
   endCursor.visible = false;
   areaBox.visible = false;
   setShape("one", true);
+  pathLine.visible = false;
   setPeekHint(null);
   $("#shapeHint").hidden = true;
 }
-$("#cancel").onclick = closeSheet;
+$("#cancel").onclick = () => {
+  closeSheet();
+  if (spotFlow) { spotFlow = false; showSpotCard(); } // QR로 왔다가 취소하면 카드로 돌아감
+};
 
 $("#form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -696,7 +930,8 @@ $("#form").addEventListener("submit", async (e) => {
   btn.disabled = true;
   btn.textContent = "등록 중…";
   const { x, z } = selected;
-  const extra = shape !== "one" && endCell ? { shape, x2: endCell.x, z2: endCell.z } : {};
+  const extra = shape === "path" && pathPts.length >= 2 ? { shape, points: pathPts }
+    : shape === "area" && endCell ? { shape, x2: endCell.x, z2: endCell.z } : {};
   try {
     const c = await api("/api/complaints", {
       method: "POST",
@@ -711,8 +946,11 @@ $("#form").addEventListener("submit", async (e) => {
     $("#text").value = "";
     closeSheet();
     onProposalsChanged();
-    const n = expandCells(c).length;
-    toast(`등록됐어요! ${TYPE_BY_CODE[c.type].icon} ${TYPE_BY_CODE[c.type].label} 블록을 ${n > 1 ? n + "곳에 " : ""}놓았어요 🎉`);
+    const n = expandCells(c).length, where = n > 1 ? n + "곳에 " : "";
+    toast(spotFlow ? `등록됐어요! ${TYPE_BY_CODE[c.type].icon} ${where}지자체 대시보드에 바로 반영돼요 🎉`
+                   : `등록됐어요! ${TYPE_BY_CODE[c.type].icon} ${TYPE_BY_CODE[c.type].label} 블록을 ${where}놓았어요 🎉`, 3500);
+    spotFlow = false;
+    $("#chips").innerHTML = "";
   } catch (err) {
     toast(err.message);
   } finally {
@@ -823,6 +1061,7 @@ $("#tool-labels").onclick = () => {
 };
 $("#tool-home").onclick = () => {
   if (!map) return;
+  if (spot) { flySpot(); showSpotCard(); return; } // QR로 왔으면 '처음 위치' = 지금 계신 곳
   homeView();
 };
 

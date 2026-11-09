@@ -121,7 +121,7 @@ def init_db():
                 conn.execute(f"ALTER TABLE complaints ADD COLUMN {col} {ddl}")
         # 여러 칸 제안(줄·네모)용 끝점 — 예전 DB에도 열을 추가 (기존 행은 NULL = 한 칸)
         cols = {r[1] for r in conn.execute("PRAGMA table_info(complaints)")}
-        for col, typ in (("x2", "INTEGER"), ("z2", "INTEGER"), ("shape", "TEXT")):
+        for col, typ in (("x2", "INTEGER"), ("z2", "INTEGER"), ("shape", "TEXT"), ("points", "TEXT")):
             if col not in cols:
                 conn.execute(f"ALTER TABLE complaints ADD COLUMN {col} {typ}")
 
@@ -139,7 +139,13 @@ app.include_router(heatmodel.router)
 
 
 def row_to_dict(row: sqlite3.Row) -> dict:
-    return dict(row)
+    d = dict(row)
+    if d.get("points"):  # 자유 그리기 경로는 JSON 문자열로 저장 → 목록으로
+        try:
+            d["points"] = json.loads(d["points"])
+        except ValueError:
+            d["points"] = None
+    return d
 
 
 def now_kst() -> str:
@@ -156,11 +162,13 @@ class ComplaintIn(BaseModel):
     lng: float = Field(ge=-180, le=180)
     zone: str = Field(min_length=1, max_length=20)
     type: str
-    text: str = Field(min_length=1, max_length=200)
-    # 선택: 여러 칸에 한 번에 놓기. shape "line"(줄) / "area"(네모), (x2, z2) = 끝점·반대 모서리
+    text: str = Field(default="", max_length=200)  # 비워도 됨 (거리에서 QR로 빠르게 등록)
+    # 선택: 여러 칸에 한 번에 놓기. shape "path"(자유 그리기, points 필요) / "area"(네모) / "line"(줄)
+    # (x2, z2) = 끝점·반대 모서리. path 는 서버가 points 의 마지막 점으로 채운다
     x2: Optional[int] = Field(None, ge=0, le=5000)
     z2: Optional[int] = Field(None, ge=0, le=5000)
-    shape: Optional[Literal["line", "area"]] = None
+    shape: Optional[Literal["line", "area", "path"]] = None
+    points: Optional[list[tuple[int, int]]] = Field(None, max_length=300)
 
 
 class Login(BaseModel):
@@ -238,18 +246,25 @@ def list_complaints(since_id: int = 0, limit: int = 500):
 def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks):
     if body.type not in TYPES:
         raise HTTPException(400, f"알 수 없는 유형입니다: {body.type}")
-    text = body.text.strip()
-    if not text:
-        raise HTTPException(400, "의견을 입력해 주세요.")
-    x2, z2, shape = body.x2, body.z2, body.shape
+    # 글 없이 유형만 골라도 등록된다. 목록·AI 요약에서 빈 칸이 되지 않게 유형 이름으로 채움
+    text = body.text.strip() or f"{TYPES[body.type]} 요청"
+    x2, z2, shape, points = body.x2, body.z2, body.shape, None
     if shape is None:
         x2 = z2 = None
     else:
-        if x2 is None or z2 is None:
-            raise HTTPException(400, "끝점을 골라 주세요.")
         if body.type not in heatmodel.FIX:
             raise HTTPException(400, "여러 칸에 놓기는 개선 제안만 할 수 있어요.")
-        n = len(heatmodel.expand_cells({"type": body.type, "x": body.x, "z": body.z, "x2": x2, "z2": z2, "shape": shape}))
+        if shape == "path":
+            pts = [list(p) for p in (body.points or [])]
+            if len(pts) < 2 or any(not (0 <= a <= 5000 and 0 <= b <= 5000) for a, b in pts):
+                raise HTTPException(400, "지도에서 길을 그려 주세요.")
+            if pts[0] != [body.x, body.z]:
+                raise HTTPException(400, "그린 길의 시작점이 위치와 달라요.")
+            x2, z2 = pts[-1]
+            points = json.dumps(pts, separators=(",", ":"))
+        elif x2 is None or z2 is None:
+            raise HTTPException(400, "끝점을 골라 주세요.")
+        n = len(heatmodel.expand_cells({"type": body.type, "x": body.x, "z": body.z, "x2": x2, "z2": z2, "shape": shape, "points": points}))
         if n > heatmodel.MAX_CELLS:
             raise HTTPException(400, f"범위가 너무 넓어요. 블록 {heatmodel.MAX_CELLS}개 이하로 골라 주세요.")
     ip = request.client.host if request.client else "?"
@@ -257,9 +272,9 @@ def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks):
     check_duplicate(ip, body.x, body.z, body.type)
     with _db_lock, db() as conn:
         cur = conn.execute(
-            "INSERT INTO complaints (x, z, lat, lng, zone, type, text, created_at, x2, z2, shape)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (body.x, body.z, body.lat, body.lng, body.zone.upper(), body.type, text, now_kst(), x2, z2, shape),
+            "INSERT INTO complaints (x, z, lat, lng, zone, type, text, created_at, x2, z2, shape, points)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (body.x, body.z, body.lat, body.lng, body.zone.upper(), body.type, text, now_kst(), x2, z2, shape, points),
         )
         new_id = cur.lastrowid
         row = conn.execute("SELECT * FROM complaints WHERE id = ?", (new_id,)).fetchone()

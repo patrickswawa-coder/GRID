@@ -66,8 +66,17 @@ streamlit run dashboard/app.py
 | Streamlit 대시보드 | ✅ 지표·히트맵·유형/구역 통계·AI 요약·CSV |
 | 실제 무실동 맵 변환기 | ✅ 코드 있음 — SHP 받아서 실행 필요 |
 | 서버 배포 (7조 서버 32.190.9.9) | 📝 `deploy/README.md` — 접속 후 한 줄로 설정 |
-| QR 코드 | 📝 `python data/make_qr.py https://서버주소/` |
+| QR 코드 | ✅ `python data/make_qr.py http://서버주소/ --spots data/qr_spots.csv` → `data/qr/` 장소별 포스터 (거리 QR 위치 모드) |
 
 ## 서버 배포
 
 `deploy/README.md` 참고. 요약: `main`에 merge → 서버에서 `./deploy.sh`.
+
+
+## 거리 QR 위치 모드
+길에 붙인 QR을 찍으면 안내창 없이 **그 자리로 바로** 이동해서 📍"지금 계신 곳" 핀과 **[이곳에 의견 남기기]** 카드를 보여줍니다. 유형만 고르면 글 없이도 등록돼요(빠른 문구 버튼 제공).
+
+- QR 주소: `http://서버/?at=위도,경도&name=장소이름`
+- 장소 목록: `data/qr_spots.csv` (name,lat,lng). 지금은 **열섬이 높고(92~95) 그늘막 하나로 지수가 눈에 띄게 내려가는(−3~−4)** 지점 3곳
+  - 지수가 100인 칸(시가지의 약 2%)은 포화 구간이라 제안 하나로 숫자가 안 바뀌므로 QR 위치로 쓰지 않음
+- 포스터 만들기: `python data/make_qr.py http://32.190.9.9/ --spots data/qr_spots.csv` → `data/qr/*.png`
