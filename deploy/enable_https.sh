@@ -29,7 +29,6 @@ echo "▶ 2/4 certbot 설치"
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq certbot >/dev/null
 
 echo "▶ 3/4 인증서 발급 (1분 이내)"
-sudo mkdir -p /var/www/grid/.well-known/acme-challenge
 if [ -n "$EMAIL" ]; then MAIL=(-m "$EMAIL"); else MAIL=(--register-unsafely-without-email); fi
 sudo certbot certonly --webroot -w /var/www/grid -d "$DOMAIN" --non-interactive --agree-tos "${MAIL[@]}" \
   --keep-until-expiring --deploy-hook "systemctl reload nginx"

@@ -5,6 +5,6 @@ set -e
 cd ~/GRID
 git pull --ff-only
 .venv/bin/pip install -q -r backend/requirements.txt
-rsync -a --delete web/ /var/www/grid/
+rsync -a --delete --exclude .well-known web/ /var/www/grid/   # .well-known: HTTPS 인증서 갱신용(root 소유) 폴더는 건드리지 않음
 sudo systemctl restart grid-api
 echo "배포 완료"
