@@ -232,6 +232,6 @@ def test_path_validation():
     base = {**SAMPLE, "x": 400, "z": 400, "shape": "path"}
     assert client.post("/api/complaints", json={**base, "points": [[400, 400]]}).status_code == 400
     assert client.post("/api/complaints", json={**base, "points": [[1, 1], [5, 5]]}).status_code == 400  # 시작점 불일치
-    long_path = [[400, 400 + i] for i in range(0, 200, 5)]  # 195칸 → 가로수 60곳 넘음
+    long_path = [[400, 400 + i] for i in range(0, 200, 5)]  # 195칸 → 가로수 66곳, 50곳 넘음
     assert client.post("/api/complaints", json={**base, "points": long_path}).status_code == 400
     assert client.post("/api/complaints", json={**base, "points": [[400, 400]] * 301}).status_code == 422

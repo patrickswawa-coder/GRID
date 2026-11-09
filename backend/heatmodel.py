@@ -32,7 +32,7 @@ FIX = set(EFFECTS)
 # 여러 칸 제안(자유 그리기·네모·줄) — web/js/shape.js 의 STEP, MAX_CELLS, expandCells() 와 같게
 # (두 언어 결과를 맞추려고 hypot 대신 sqrt, round 대신 floor(v + 0.5))
 STEP = {"tree": 3, "shade": 3, "coolfog": 4, "pocketpark": 4, "greenroof": 3, "coolpave": 3}
-MAX_CELLS = 30
+MAX_CELLS = 50
 MAX_POINTS = 300
 SHAPES = ("line", "area", "path")
 

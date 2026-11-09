@@ -10,7 +10,7 @@
 
 // 블록 사이 간격(칸, 1칸=5m). 모형 크기와 영향 범위를 보고 정함
 export const STEP = { tree: 3, shade: 3, coolfog: 4, pocketpark: 4, greenroof: 3, coolpave: 3 };
-export const MAX_CELLS = 30; // 제안 하나에 놓을 수 있는 최대 블록 수 (서버도 같은 값)
+export const MAX_CELLS = 50; // 제안 하나에 놓을 수 있는 최대 블록 수 (서버도 같은 값)
 export const MAX_POINTS = 300; // 그린 길의 점 수 상한 (서버도 같은 값)
 export const SHAPES = ["line", "area", "path"];
 
