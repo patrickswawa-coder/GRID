@@ -299,3 +299,5 @@ body.spot-open .probe, body.spot-open .crosshair, body.sheet-open .spot-card { d
   .spot-card { bottom: calc(env(safe-area-inset-bottom) + 66px); }
   body.spot-open .env-now { display: none; }
 }
+
+.tool[hidden] { display: none; }
