@@ -333,7 +333,7 @@ function loop() {
   renderer.render(scene, camera);
   checkPerf();
 }
-loop();
+requestAnimationFrame(loop); // 바로 부르지 않음: 아래쪽 let(drawing 등)이 다 준비된 뒤 첫 프레임
 
 // 느린 기기 대응: 처음 1초(셰이더 준비 등)는 건너뛰고 그다음 60프레임을 잰다.
 // 느리면 한 단계씩만 낮춘다: ① 그림자 끄기 → ② 해상도 1.5배 → ③ 1배. (예전처럼 바로 1배로 떨어뜨리지 않음)

@@ -18,6 +18,8 @@
 """
 import argparse
 import math
+import re
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -27,7 +29,7 @@ from pyproj import Transformer
 import voxelfmt as vf
 
 METRIC = "EPSG:5186"  # 중부원점 TM (미터)
-DEFAULT_BBOX = (127.9080, 37.3195, 127.9380, 37.3455)  # 서, 남, 동, 북 (무실동 + 남쪽 삼육고·남원주IC, 서쪽 송삼마을)
+DEFAULT_BBOX = (127.9080, 37.3186, 127.9380, 37.3455)  # 서, 남, 동, 북 (무실동 + 남쪽 삼육고·남원주IC·호반써밋 원주역, 서쪽 송삼마을)
 
 FLOOR_CANDIDATES = ["A26", "GRND_FLR", "grnd_flr", "지상층수", "FLOORS", "floors"]
 HEIGHT_CANDIDATES = ["A16", "HEIGHT", "height", "높이", "BLD_HGT"]
@@ -105,8 +107,27 @@ def add_missing_buildings(bld, path, bbox_m):
         "A9": j["BDTYP_CD"].astype(str).str[:2].map(JUSO_USE).fillna("근린생활시설"),
         "A24": j.get("BULD_NM"),
     }, geometry=j.geometry.values, crs=j.crs)
+    apply_height_custom(extra, j.get("BULD_NM_DC"))
     print(f"도로명주소 건물에서 빠진 건물 {len(extra)}동 추가")
     return gpd.pd.concat([bld, extra], ignore_index=True)
+
+
+HEIGHT_CUSTOM = Path(__file__).with_name("height_custom.csv")
+
+
+def apply_height_custom(extra, detail):
+    """새로 지어 도로명주소에 층수가 덜 들어간 건물을 data/height_custom.csv 로 덮어쓴다."""
+    if not HEIGHT_CUSTOM.exists() or detail is None:
+        return
+    detail = detail.fillna("").astype(str).to_numpy()
+    names = extra["A24"].fillna("").astype(str).to_numpy()
+    for line in HEIGHT_CUSTOM.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        name, dong, floors = [t.strip() for t in line.split(",")[:3]]
+        hit = (names == name) & np.array([bool(re.fullmatch(dong, d)) for d in detail])
+        extra.loc[hit, "A26"] = float(floors)
+        print(f"층수 직접 입력: {name} {hit.sum()}동 → {floors}층")
 
 
 def kind_of(use: str) -> int:
