@@ -153,6 +153,22 @@ def check_rate(ip: str):
     _last_post[ip] = t
 
 
+# 같은 사람(IP)이 같은 칸에 같은 유형을 짧은 시간에 반복 등록하는 것(도배)만 막는다.
+# 시연장처럼 여러 명이 같은 와이파이(같은 IP)를 써도 서로 다른 칸·유형은 막히지 않게 일부러 좁게 잡음.
+DUP_WINDOW = float(os.getenv("DUP_WINDOW", "600"))  # 초
+_recent: dict[tuple, float] = {}
+
+
+def check_duplicate(ip: str, x: int, z: int, ctype: str):
+    t = time.time()
+    for k in [k for k, v in _recent.items() if t - v > DUP_WINDOW]:
+        del _recent[k]
+    key = (ip, x, z, ctype)
+    if DUP_WINDOW and key in _recent:
+        raise HTTPException(409, "이미 같은 곳에 같은 제안을 하셨어요. 공감 버튼을 눌러 주세요.")
+    _recent[key] = t
+
+
 # ---------------------------------------------------------------- API
 
 
@@ -178,7 +194,9 @@ def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks):
     text = body.text.strip()
     if not text:
         raise HTTPException(400, "의견을 입력해 주세요.")
-    check_rate(request.client.host if request.client else "?")
+    ip = request.client.host if request.client else "?"
+    check_rate(ip)
+    check_duplicate(ip, body.x, body.z, body.type)
     with _db_lock, db() as conn:
         cur = conn.execute(
             "INSERT INTO complaints (x, z, lat, lng, zone, type, text, created_at)"
