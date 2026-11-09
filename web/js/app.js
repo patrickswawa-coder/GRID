@@ -492,7 +492,30 @@ function onTap(px, py) {
 
   // 2) 건물/지면을 눌렀으면 그 칸 선택
   const c = pickCell();
+  // 이미 선택한 곳(파란 기둥·핀 또는 같은 칸)을 한 번 더 누르면 선택 해제.
+  // 한 곳 놓기일 때만 — 줄·네모는 위 0)에서 두 번째 누름이 끝점으로 처리된다.
+  // (시트가 올라오면 카메라가 움직여서 같은 칸도 화면 위치가 달라지므로, 칸 비교와 화면 위 기둥 터치를 둘 다 본다)
+  if (selected && shape === "one" && (hitsCursor(px, py) || (c && c.x === selected.x && c.z === selected.z))) {
+    // 의견을 이미 쓴 상태면 실수로 글이 날아가지 않게 한 번 물어본다
+    if ($("#text").value.trim() && !confirm("선택을 풀까요? 쓰던 의견은 지워져요.")) return;
+    $("#text").value = "";
+    closeSheet();
+    toast("선택을 취소했어요");
+    return;
+  }
   if (c) selectCell(c.x, c.z);
+}
+
+// 화면에서 (px,py)가 선택 표시(파란 핀·기둥 아래쪽 바닥)를 눌렀는지
+function hitsCursor(px, py) {
+  if (!cursor.visible) return false;
+  const v = new THREE.Vector3();
+  for (const [pos, r] of [[cursorPin.getWorldPosition(v), 32], [cursor.position.clone(), 26]]) {
+    const q = pos.clone().project(camera);
+    if (q.z > 1) continue;
+    if (Math.hypot((q.x + 1) / 2 * innerWidth - px, (1 - q.y) / 2 * innerHeight - py) < r) return true;
+  }
+  return false;
 }
 
 // 화면에서 누른 곳(ray)의 칸
