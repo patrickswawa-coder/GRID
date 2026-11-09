@@ -244,3 +244,16 @@ def test_latlng_from_cell_not_browser():
     assert r.status_code == 201
     lat, lng = geo.cell_to_latlng(main.heatmodel._load()["meta"], 409, 3)
     assert abs(r.json()["lat"] - lat) < 1e-6 and abs(r.json()["lng"] - lng) < 1e-6
+
+
+def test_same_wifi_different_people_not_blocked(monkeypatch):
+    # 시연장: 같은 IP(같은 와이파이)에서 여러 사람이 같은 QR 자리에 같은 유형을 등록해도 막히지 않아야 함
+    monkeypatch.setattr(main, "POST_INTERVAL", 3)
+    body = {**SAMPLE, "x": 321, "z": 54, "type": "shade"}
+    a, b = {"X-Client-Id": "judge-a"}, {"X-Client-Id": "judge-b"}
+    assert client.post("/api/complaints", json=body, headers=a).status_code == 201
+    assert client.post("/api/complaints", json=body, headers=b).status_code == 201
+    # 같은 기기가 바로 또 보내면 간격 제한(429), 간격이 지나도 같은 칸·유형이면 중복(409)
+    assert client.post("/api/complaints", json=body, headers=a).status_code == 429
+    monkeypatch.setattr(main, "POST_INTERVAL", 0)
+    assert client.post("/api/complaints", json=body, headers=a).status_code == 409

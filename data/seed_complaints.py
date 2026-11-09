@@ -2,9 +2,9 @@
 
 실행: python data/seed_complaints.py --api http://localhost:8000 --n 80
   ※ 서버를 POST_INTERVAL=0 으로 띄워야 빨리 들어갑니다.
-     운영 서버(POST_INTERVAL=3)에 넣을 때는 --delay 3.2 를 붙이세요.
+     운영 서버에 넣을 때는 --delay 1.1 을 붙이세요 (같은 IP는 분당 60건까지).
 
-시연용(추천): python data/seed_complaints.py --api http://서버 --n 60 --focus 5 --seed 7
+시연용(추천): python data/seed_complaints.py --api http://서버 --n 60 --focus 5 --seed 7 --delay 1.1
   --focus N : 서버 /api/priority 의 열섬 상위 N개 구역 안에 핫스팟을 잡아서
               '뜨거운 곳에 시민 요구가 몰린다'는 흐름이 대시보드에 보이게 한다.
   --seed    : 같은 숫자면 매번 같은 데이터 (리허설과 본 시연을 똑같이)
@@ -83,7 +83,8 @@ def main():
         body = {"x": x, "z": z, "lat": lat, "lng": lng, "zone": vf.zone_of(meta, x, z),
                 "type": t, "text": random.choice(TEXTS[t])}
         req = urllib.request.Request(f"{a.api}/api/complaints", data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json"}, method="POST")
+                                     headers={"Content-Type": "application/json", "X-Client-Id": f"seed-{random.random()}"},
+                                     method="POST")  # 민원마다 다른 시민처럼
         try:
             cid = json.load(urllib.request.urlopen(req))["id"]
         except urllib.error.HTTPError as e:

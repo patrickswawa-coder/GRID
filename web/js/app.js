@@ -247,8 +247,20 @@ function enterSpot() {
 
 function flySpot() {
   focusTo = null;
-  controls.target.set(spot.x + 0.5, 0, spot.z + 0.5);
-  camera.position.set(spot.x + 0.5 + 55, 85, spot.z + 0.5 + 90); // 주변 골목까지 보이게
+  const { width: W, depth: D } = map.meta;
+  const px = spot.x + 0.5, pz = spot.z + 0.5;
+  // 기본: 남동쪽에서 바라봄 (주변 골목까지 보이게)
+  let ux = 55 / 105, uz = 90 / 105, tx = px, tz = pz;
+  // 지도 가장자리 근처(예: 북쪽 끝의 시외버스터미널)면 기본 방향으로는 화면 위쪽 절반이 지도 밖 하늘이 된다.
+  // → 지도 바깥쪽에서 안쪽(지도 가운데 방향)을 바라보게 돌리고, 핀이 아래 카드 바로 위에 오도록 시점을 안쪽으로 조금 민다.
+  //   (카메라와 핀 사이의 지도 밖 띠는 아래 카드에 가려짐)
+  if (Math.min(px, pz, W - px, D - pz) < 110) {
+    const vx = W / 2 - px, vz = D / 2 - pz, L = Math.hypot(vx, vz) || 1;
+    ux = -vx / L; uz = -vz / L;
+    tx = px - ux * 22; tz = pz - uz * 22;
+  }
+  controls.target.set(tx, 0, tz);
+  camera.position.set(tx + ux * 105, 85, tz + uz * 105);
 }
 
 function showSpotCard() {
@@ -271,6 +283,31 @@ $("#spotGo").onclick = () => {
   setPeek(false); // 이미 '의견 남기기'를 눌렀으니 접힌 상태가 아니라 바로 펼쳐서
 };
 $("#spotLook").onclick = () => { hideSpotCard(); toast("바꾸고 싶은 곳을 눌러 주세요 👆", 3000); };
+
+// ---------------------------------------------------------------- 내 위치 (GPS)
+// 브라우저는 HTTPS(또는 localhost)에서만 위치를 알려준다 → http 에서는 버튼을 숨김.
+// 찾은 위치는 QR 위치 모드와 똑같이 '지금 계신 곳' 카드로 보여준다.
+if (window.isSecureContext && navigator.geolocation) $("#tool-gps").hidden = false;
+$("#tool-gps").onclick = () => {
+  if (!map) return;
+  toast("지금 계신 곳을 찾는 중이에요… 📍", 4000);
+  navigator.geolocation.getCurrentPosition((pos) => {
+    const { latitude, longitude, accuracy } = pos.coords;
+    let { x, z } = latLngToCell(map.meta, latitude, longitude);
+    if (x < 0 || z < 0 || x >= map.meta.width || z >= map.meta.depth) {
+      toast("지금은 무실동 지도 밖에 계세요. 지도를 눌러 원하는 곳을 골라 주세요", 4500);
+      return;
+    }
+    [x, z] = snapToStreet(x, z);
+    const acc = Math.round(accuracy || 0);
+    spot = { x, z, name: "내 위치 근처" + (acc ? ` (오차 약 ${acc}m)` : "") };
+    closeSheet();
+    flySpot();
+    showSpotCard();
+  }, (err) => {
+    toast(err.code === 1 ? "위치 권한을 허용해야 내 위치를 볼 수 있어요" : "위치를 찾지 못했어요. 지도를 눌러 골라 주세요", 4000);
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+};
 
 // 핀은 화면 좌표로 따라다니게 (3D 아이콘보다 멀리서도 잘 보임)
 const pinV = new THREE.Vector3();

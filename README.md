@@ -80,3 +80,5 @@ streamlit run dashboard/app.py
 - 장소 목록: `data/qr_spots.csv` (name,lat,lng). 지금은 **열섬이 높고(92~95) 그늘막 하나로 지수가 눈에 띄게 내려가는(−3~−4)** 지점 3곳
   - 지수가 100인 칸(시가지의 약 2%)은 포화 구간이라 제안 하나로 숫자가 안 바뀌므로 QR 위치로 쓰지 않음
 - 포스터 만들기: `python data/make_qr.py http://32.190.9.9/ --spots data/qr_spots.csv` → `data/qr/*.png`
+- 지도 가장자리 지점(예: 북쪽 끝 시외버스터미널)은 지도 바깥쪽에서 안쪽을 바라보게 카메라를 돌림
+- HTTPS 에서는 **📍 내 위치** 버튼(GPS)도 같은 카드로 보여줌 → [deploy/README.md](deploy/README.md) 'HTTPS 켜기'
