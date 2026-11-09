@@ -23,14 +23,14 @@ cd "$DIR"
 echo "▶ 3/6 Python 패키지 설치 (1~3분)"
 [ -d .venv ] || python3 -m venv .venv
 .venv/bin/pip install -q --upgrade pip
-.venv/bin/pip install -q -r backend/requirements.txt -r dashboard/requirements.txt
+.venv/bin/pip install -q -r backend/requirements.txt
 
 echo "▶ 4/6 시민 페이지 복사"
 sudo mkdir -p /var/www/grid
 sudo chown "$ME" /var/www/grid
 rsync -a --delete web/ /var/www/grid/
 
-echo "▶ 5/6 서비스 등록 (API :8000, 대시보드 :8501)"
+echo "▶ 5/6 서비스 등록 (API :8000)"
 sudo tee /etc/systemd/system/grid-api.service >/dev/null <<EOF
 [Unit]
 Description=GRID API (FastAPI)
@@ -49,27 +49,15 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-sudo tee /etc/systemd/system/grid-dashboard.service >/dev/null <<EOF
-[Unit]
-Description=GRID Dashboard (Streamlit)
-After=network.target grid-api.service
-
-[Service]
-User=$ME
-WorkingDirectory=$DIR
-Environment=GRID_API=http://127.0.0.1:8000
-ExecStart=$DIR/.venv/bin/streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
 sudo systemctl daemon-reload
-sudo systemctl enable -q grid-api grid-dashboard
-sudo systemctl restart grid-api grid-dashboard
+# 예전 Streamlit 대시보드 서비스가 남아 있으면 정리 (이제 /admin/ 으로 통합)
+sudo systemctl disable --now grid-dashboard 2>/dev/null || true
+sudo rm -f /etc/systemd/system/grid-dashboard.service
+sudo systemctl daemon-reload
+sudo systemctl enable -q grid-api
+sudo systemctl restart grid-api
 
-echo "▶ 6/6 nginx (80번 포트: 시민 페이지 + /api)"
+echo "▶ 6/6 nginx (80번 포트 하나: 시민 페이지 + /admin/ + /api)"
 sudo tee /etc/nginx/sites-available/grid >/dev/null <<'EOF'
 server {
     listen 80 default_server;
@@ -103,7 +91,7 @@ echo
 if curl -fs localhost/api/health >/dev/null; then
   echo "✅ 완료!"
   echo "   시민 페이지 : http://$IP/"
-  echo "   대시보드    : http://$IP:8501/"
+  echo "   대시보드    : http://$IP/admin/"
   echo "   AI 확인     : curl -s localhost/api/ai/summary"
 else
   echo "✗ API가 아직 안 떠요. 'sudo journalctl -u grid-api -n 30' 결과를 보내주세요."

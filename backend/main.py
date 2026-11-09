@@ -177,6 +177,13 @@ def health():
     return {"status": "ok", "ai": AI_ENABLED}
 
 
+@app.get("/api/config")
+def config():
+    """관리자 페이지용 공개 설정. 네이버 지도 Client ID 는 브라우저에 노출되는 값이라 내려줘도 된다
+    (Client Secret 은 절대 여기에 두지 말 것)."""
+    return {"naver_key": os.getenv("NAVER_MAP_KEY", "").strip()}
+
+
 @app.get("/api/complaints")
 def list_complaints(since_id: int = 0, limit: int = 500):
     limit = max(1, min(limit, 2000))
