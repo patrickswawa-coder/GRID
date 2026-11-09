@@ -34,7 +34,7 @@ chmod 600 .env
 echo "▶ 4/6 시민 페이지 복사"
 sudo mkdir -p /var/www/grid
 sudo chown "$ME" /var/www/grid
-rsync -a --delete web/ /var/www/grid/
+rsync -a --delete --exclude .well-known web/ /var/www/grid/
 
 echo "▶ 5/6 서비스 등록 (API :8000)"
 sudo tee /etc/systemd/system/grid-api.service >/dev/null <<EOF
