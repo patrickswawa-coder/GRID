@@ -462,7 +462,7 @@ function setShape(s, quiet = false) {
   document.querySelectorAll("#shapeBox .seg button").forEach((b) => b.classList.toggle("on", b.dataset.shape === s));
   if (!quiet) {
     refreshPreview();
-    if (s === "one") setPeek(false);
+    if (s === "one") { setPeekHint(null); setPeek(false); }
     if (s !== "one") {
       toast(s === "line" ? "줄의 끝 위치를 지도에서 눌러 주세요 👆" : "네모의 반대쪽 모서리를 지도에서 눌러 주세요 👆", 3500);
       closeSheetPeek();
@@ -483,15 +483,18 @@ function setEnd(x, z) {
     }
   }
   endCell = { x, z };
+  setPeekHint(null);
   setPeek(false);
   refreshPreview();
 }
-// 끝점을 고르는 동안은 시트를 작게 접어 지도를 넓게 보여준다
-function setPeek(on) {
-  $("#sheet").classList.toggle("peek", on);
-  liftView($("#sheet"));
+// 끝점을 고르는 동안은 시트를 접어(#29 의 접기 기능) 지도를 넓게 보여주고, 접힌 곳 안내 문구를 바꾼다
+const PEEK_HINT = $(".peek-hint")?.textContent || "";
+function setPeekHint(text) {
+  const el = $(".peek-hint");
+  if (el) el.textContent = text || PEEK_HINT;
 }
 function closeSheetPeek() {
+  setPeekHint(shape === "line" ? "👆 줄의 끝 위치를 지도에서 눌러 주세요" : "👆 네모의 반대쪽 모서리를 눌러 주세요");
   setPeek(true);
 }
 
@@ -654,7 +657,7 @@ function closeSheet() {
   endCursor.visible = false;
   areaBox.visible = false;
   setShape("one", true);
-  $("#sheet").classList.remove("peek");
+  setPeekHint(null);
   $("#shapeHint").hidden = true;
 }
 $("#cancel").onclick = closeSheet;
