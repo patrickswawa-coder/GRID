@@ -78,6 +78,7 @@ resize();
 
 // ---------------------------------------------------------------- 상태
 let map, world, labels, heat, heatOn = false;
+let drawing = null; // 자유 그리기 중인 손가락 { id, sx, sy, start, moved, capped } (#32)
 let simOn = false, heatSim = null, baseAvg = 0, lastEnv = null;
 const hiddenTypes = new Set();
 const markers = new Map(); // id → { obj, data }
@@ -645,7 +646,7 @@ function closeSheetPeek() {
 // ---------------------------------------------------------------- 손가락으로 그리기
 // 자유 그리기·네모를 고르고 시트가 접혀 있는 동안: 한 손가락(마우스 왼쪽) 끌기 = 그리기, 두 손가락(마우스 오른쪽) = 지도 이동
 const DEFAULT_ONE = controls.touches.ONE, DEFAULT_LEFT = controls.mouseButtons.LEFT;
-let drawing = null; // { id, sx, sy, start, moved, capped }
+// drawing 은 위 '상태'에서 선언 (loop()가 첫 프레임부터 읽어서 여기서 선언하면 시작 직후 오류)
 let drawRaf = 0;
 function drawMode() {
   return !!(selected && chosenType && shape !== "one" && $("#sheet").classList.contains("peek"));
