@@ -86,6 +86,9 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 | `ai_urgency` | int \| null | AI가 매긴 긴급도 1(낮음)~3(높음), AI 꺼져 있으면 null |
 | `ai_tag` | str \| null | AI가 붙인 한 단어 태그 (예: "야간안전") |
 | `created_at` | str | ISO 8601, 서버 시간(KST) |
+| `status` | str | 처리 상태: `received`(접수, 기본) / `working`(처리중) / `done`(처리 완료). 관리자가 바꾼다 |
+| `reply` | str \| null | 시민에게 보여줄 담당자 안내(300자) |
+| `status_at` | str \| null | 상태를 마지막으로 바꾼 시각 |
 
 **제안·신고 유형 `type`** (자세한 효과 값은 `web/js/types.js`)
 
@@ -112,14 +115,23 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 | GET | `/api/health` | `{"status":"ok"}` |
 | GET | `/api/complaints?since_id=0&limit=500` | 민원 목록 (id 오름차순). `since_id`보다 큰 것만 |
 | POST | `/api/complaints` | 등록. body: `{x, z, lat, lng, zone, type, text}` → 저장된 민원. 같은 IP가 3초 안에 다시 보내면 429, 같은 IP·칸·유형을 10분 안에 다시 보내면 409 |
-| POST | `/api/complaints/{id}/like` | 공감 +1 → 갱신된 민원 |
+| POST | `/api/complaints/{id}/like` | 공감 +1 → 갱신된 민원. 같은 `X-Client-Id`(없으면 같은 IP)가 같은 민원에 다시 누르면 409 |
 | GET | `/api/stats` | `{total, by_type:{}, by_zone:{}, top_zones:[{zone,count,top_type}], today}` |
 | GET | `/api/ai/summary` | `{summary, generated_at, ai:true/false}` 최근 민원 요약 (5분 캐시) |
-| POST | `/api/ai/explain` | (기존) `{text}` → `{answer}` |
+| GET | `/api/complaints/sync` | 가벼운 `[{id,status,likes,reply}]` 전체 — 시민 지도가 상태 변경·삭제를 반영할 때 |
+| PATCH | `/api/complaints/{id}` | **관리자** `{status?, reply?}` → 갱신된 민원 |
+| DELETE | `/api/complaints/{id}` | **관리자** 삭제 |
+| GET | `/api/admin/auth` · POST `/api/admin/login` | 비밀번호 필요 여부 · `{password}` 확인 |
+| GET | `/api/admin/backup` | **관리자** DB 파일 내려받기 |
+| GET | `/api/qr?url=...` | 접속 QR 코드(SVG) |
+| GET | `/api/config` | `{naver_key}` 네이버 지도 Client ID (비밀 아님) |
+| GET | `/api/meta` | 지도 크기·구역 크기 |
 | GET | `/api/env` | 실시간 `{air:{station,pm10,pm25,o3,grade,pm25_grade}, weather:{temp,humidity,wind}, updated_at, errors}` (10분 캐시, 에어코리아·기상청) |
 | GET | `/api/env/history?hours=48` | `/api/env` 호출 기록 (대시보드 추이) |
 | GET | `/api/priority?limit=30` | 200m 구역별 `{rank, zone, name, score, heat, heat_p90, heat_after, delta, proposals, reports, likes, top_type, lat, lng, built, paved, green}` (열섬 평균 × 시민 요구, `paved`/`green`은 0~1 토지 구성 비율) |
 | GET | `/api/ai/policy` | 우선 개선 구역 TOP 3 정책 제안 `{text, ai, generated_at}` (AI 실패 시 규칙 기반) |
+
+**관리자 API**는 요청 헤더 `X-Admin-Token: <ADMIN_PASSWORD>` 가 필요합니다 (서버 `.env` 의 `ADMIN_PASSWORD`; 비어 있으면 인증 없이 열림 = 로컬 개발용).
 
 에러는 FastAPI 기본 형식 `{"detail": "..."}` 을 씁니다.
 

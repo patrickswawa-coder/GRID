@@ -10,6 +10,9 @@
   <header class="top">
     <div class="brand"><b>🧱 GRID</b> <span>환경·민원 대시보드</span></div>
     <nav>
+      <button id="btn-qr" type="button" class="btn ghost">📱 QR</button>
+      <button id="btn-backup" type="button" class="btn ghost" hidden>💾 DB 백업</button>
+      <button id="btn-login" type="button" class="btn ghost" hidden>🔒 관리자 로그인</button>
       <a href="../" class="btn ghost">시민 지도 ↗</a>
       <span id="status" class="status" title="자동 새로고침">● 연결 중…</span>
     </nav>
@@ -59,6 +62,7 @@
 
     <section>
       <h2>📊 민원 현황</h2>
+      <div id="schips" class="chips" aria-label="처리 상태 필터"></div>
       <div id="chips" class="chips" aria-label="유형 필터"></div>
       <div id="kpis" class="cards5"></div>
       <div class="two">
@@ -80,6 +84,14 @@
       <p id="updated" class="cap"></p>
     </section>
   </main>
+
+  <dialog id="qrdlg">
+    <h3>📱 시민 접속 QR</h3>
+    <img id="qrimg" alt="시민 지도 접속 QR 코드" width="260" height="260">
+    <label class="cap">QR이 여는 주소 <input id="qrurl" type="url"></label>
+    <p id="qrwarn" class="cap" hidden>⚠️ localhost 주소는 다른 사람 폰에서 열리지 않아요. 서버 주소로 바꿔 주세요.</p>
+    <div class="dlg-actions"><button id="qrprint" type="button" class="btn">🖨️ 인쇄</button><button id="qrclose" type="button" class="btn">닫기</button></div>
+  </dialog>
 
   <script type="module" src="admin.js"></script>
 </body>

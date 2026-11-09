@@ -39,7 +39,7 @@ SERVE_WEB=1 AI_ENABLED=0 POST_INTERVAL=0 uvicorn main:app --reload --port 8000
 # Windows PowerShell
 $env:SERVE_WEB="1"; $env:AI_ENABLED="0"; $env:POST_INTERVAL="0"; uvicorn main:app --reload --port 8000
 ```
-→ 시민 페이지 http://localhost:8000 · **공무원 대시보드 http://localhost:8000/admin/** (같은 서버, 같은 포트)
+→ 시민 페이지 http://localhost:8000 · **공무원 대시보드 http://localhost:8000/admin/** (같은 서버, 같은 포트). 관리자 기능(처리 상태·답변·삭제·DB 백업)은 `.env` 의 `ADMIN_PASSWORD` 로 로그인 (`.env.example` 참고)
 
 터미널 2 — 더미 민원 넣기 (선택)
 ```bash

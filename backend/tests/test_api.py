@@ -116,3 +116,70 @@ def test_duplicate_same_cell_same_type_blocked():
 def test_meta():
     m = client.get("/api/meta").json()
     assert m["zone_size"] > 0 and m["width"] > 0 and m["depth"] > 0
+
+
+def _new(**kw):
+    r = client.post("/api/complaints", json={**SAMPLE, "x": 400 + kw.pop("dx", 0), "z": 400, **kw})
+    assert r.status_code == 201
+    return r.json()
+
+
+def test_status_reply_delete_and_sync(monkeypatch):
+    monkeypatch.setattr(main, "ADMIN_PASSWORD", "")  # 비밀번호 없으면 통과
+    c = _new(dx=1)
+    assert c["status"] == "received" and c["reply"] is None
+    r = client.patch(f"/api/complaints/{c['id']}", json={"status": "working", "reply": "현장 확인 중입니다"})
+    assert r.status_code == 200 and r.json()["status"] == "working" and r.json()["reply"] == "현장 확인 중입니다"
+    assert r.json()["status_at"]
+    assert client.patch(f"/api/complaints/{c['id']}", json={"status": "bogus"}).status_code == 400
+    assert client.patch(f"/api/complaints/{c['id']}", json={}).status_code == 400
+    assert client.patch("/api/complaints/99999", json={"status": "done"}).status_code == 404
+    assert any(x["id"] == c["id"] and x["status"] == "working" for x in client.get("/api/complaints/sync").json())
+    assert client.delete(f"/api/complaints/{c['id']}").status_code == 200
+    assert client.delete(f"/api/complaints/{c['id']}").status_code == 404
+    assert all(x["id"] != c["id"] for x in client.get("/api/complaints/sync").json())
+
+
+def test_admin_password(monkeypatch):
+    monkeypatch.setattr(main, "ADMIN_PASSWORD", "pw123")
+    c = _new(dx=2)
+    assert client.get("/api/admin/auth").json() == {"required": True}
+    assert client.post("/api/admin/login", json={"password": "no"}).status_code == 401
+    assert client.post("/api/admin/login", json={"password": "pw123"}).status_code == 200
+    assert client.patch(f"/api/complaints/{c['id']}", json={"status": "done"}).status_code == 401
+    assert client.delete(f"/api/complaints/{c['id']}").status_code == 401
+    assert client.get("/api/admin/backup").status_code == 401
+    h = {"X-Admin-Token": "pw123"}
+    assert client.patch(f"/api/complaints/{c['id']}", json={"status": "done"}, headers=h).status_code == 200
+    b = client.get("/api/admin/backup", headers=h)
+    assert b.status_code == 200 and b.content.startswith(b"SQLite format 3")
+    assert client.delete(f"/api/complaints/{c['id']}", headers=h).status_code == 200
+
+
+def test_like_once_per_client():
+    c = _new(dx=3)
+    a, b = {"X-Client-Id": "aaa"}, {"X-Client-Id": "bbb"}
+    assert client.post(f"/api/complaints/{c['id']}/like", headers=a).status_code == 200
+    assert client.post(f"/api/complaints/{c['id']}/like", headers=a).status_code == 409
+    assert client.post(f"/api/complaints/{c['id']}/like", headers=b).json()["likes"] == 2  # 같은 IP여도 다른 사람
+
+
+def test_qr_and_config():
+    r = client.get("/api/qr", params={"url": "http://32.190.9.9/"})
+    assert r.status_code == 200 and b"<svg" in r.content
+    assert client.get("/api/qr", params={"url": "javascript:alert(1)"}).status_code == 400
+    assert "naver_key" in client.get("/api/config").json()
+    assert client.post("/api/ai/explain", json={"text": "x"}).status_code in (404, 405)  # 제거됨
+
+
+def test_old_db_is_migrated(tmp_path, monkeypatch):
+    import sqlite3
+    p = tmp_path / "old.db"
+    con = sqlite3.connect(p)
+    con.execute("CREATE TABLE complaints (id INTEGER PRIMARY KEY AUTOINCREMENT, x INT, z INT, lat REAL, lng REAL, zone TEXT, type TEXT, text TEXT, likes INT DEFAULT 0, ai_urgency INT, ai_tag TEXT, created_at TEXT)")
+    con.execute("INSERT INTO complaints (x,z,lat,lng,zone,type,text,created_at) VALUES (1,1,0,0,'A1','tree','옛 민원','2026-01-01')")
+    con.commit(); con.close()
+    monkeypatch.setattr(main, "DB_PATH", str(p))
+    main.init_db()
+    with main.db() as conn:
+        assert conn.execute("SELECT status FROM complaints").fetchone()[0] == "received"

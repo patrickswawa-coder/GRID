@@ -244,8 +244,19 @@ function lower(step, ms) {
 }
 
 // ---------------------------------------------------------------- 서버 통신
+function clientId() {
+  try {
+    let id = localStorage.getItem("grid-client");
+    if (!id) { id = (crypto.randomUUID?.() || String(Math.random()).slice(2) + Date.now()); localStorage.setItem("grid-client", id); }
+    return id;
+  } catch { return ""; }
+}
+const STATUS_LABEL = { received: "접수", working: "처리중", done: "처리 완료" };
+function myIds() { try { return JSON.parse(localStorage.getItem("grid-mine") || "[]"); } catch { return []; } }
+function rememberMine(id) { try { localStorage.setItem("grid-mine", JSON.stringify([...myIds(), id].slice(-200))); } catch {} }
+
 async function api(path, opts = {}) {
-  const res = await fetch(API + path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const res = await fetch(API + path, { headers: { "Content-Type": "application/json", "X-Client-Id": clientId() }, ...opts });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.detail?.[0]?.msg || data.detail || `서버 오류 (${res.status})`);
   return data;
@@ -255,12 +266,34 @@ async function poll() {
   try {
     const list = await api(`/api/complaints?since_id=${lastId}`);
     for (const c of list) addMarker(c, false);
-    if (list.length) onProposalsChanged();
+    const changed = await syncState().catch((e) => { console.warn("[GRID] sync 실패", e); return false; }); // 상태·공감 변경, 삭제 반영
+    if (list.length || changed) onProposalsChanged();
     $("#count").textContent = markers.size;
     $("#offline").hidden = true;
   } catch {
     $("#offline").hidden = false;
   }
+}
+
+// 공무원이 상태를 바꾸거나 민원을 지우면 열려 있는 지도에도 반영한다 (새 글은 위 since_id 로 받음)
+async function syncState() {
+  const rows = await api("/api/complaints/sync");
+  const alive = new Set(rows.map((r) => r.id));
+  let changed = false;
+  for (const [id, m] of [...markers]) {
+    if (alive.has(id)) continue;
+    if (detailId === id) closeDetail();
+    markerRoot.remove(m.obj); markers.delete(id); changed = true;
+  }
+  for (const r of rows) {
+    const m = markers.get(r.id);
+    if (!m) continue;
+    const was = m.data.status;
+    Object.assign(m.data, { status: r.status, likes: r.likes, reply: r.reply });
+    if (was && was !== r.status && myIds().includes(r.id)) toast(`내 제안이 '${STATUS_LABEL[r.status] || r.status}'(으)로 바뀌었어요 🔔`, 4500);
+    if (detailId === r.id) paintDetailStatus(m.data);
+  }
+  return changed;
 }
 
 function addMarker(c, animate) {
@@ -485,6 +518,7 @@ $("#form").addEventListener("submit", async (e) => {
       }),
     });
     addMarker(c, true);
+    rememberMine(c.id);
     $("#count").textContent = markers.size;
     $("#text").value = "";
     closeSheet();
@@ -511,9 +545,17 @@ function showDetail(c) {
   $("#d-heat").innerHTML = heatHTML(c.x, c.z);
   $("#d-text").textContent = c.text;
   $("#d-time").textContent = new Date(c.created_at).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
+  paintDetailStatus(c);
+  $("#detail").classList.add("open");
+}
+function paintDetailStatus(c) {
+  const st = c.status || "received";
+  const b = $("#d-status");
+  b.className = `badge ${st}`; b.textContent = STATUS_LABEL[st] || st;
+  $("#d-reply").hidden = !c.reply;
+  $("#d-reply").textContent = c.reply ? `💬 담당자 안내: ${c.reply}` : "";
   $("#d-like").textContent = `👍 공감 ${c.likes}`;
   $("#d-like").disabled = likedIds().includes(c.id);
-  $("#detail").classList.add("open");
 }
 function closeDetail() {
   $("#detail").classList.remove("open");

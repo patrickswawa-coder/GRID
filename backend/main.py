@@ -3,16 +3,20 @@
 실행(로컬):  cd backend && uvicorn main:app --reload --port 8000
 규칙: docs/CONVENTIONS.md 의 '5. 민원 데이터', '6. API' 를 따른다.
 """
+import hmac
+import io
 import json
 import os
 import sqlite3
+import tempfile
 import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -37,6 +41,8 @@ MODEL_ID = os.getenv("MODEL_ID", "global.anthropic.claude-haiku-4-5-20251001-v1:
 AI_ENABLED = os.getenv("AI_ENABLED", "1") == "1"
 # 로컬 개발 때 web/ 폴더까지 같이 서빙 (서버에서는 nginx가 web/을 서빙하므로 0)
 SERVE_WEB = os.getenv("SERVE_WEB", "0") == "1"
+# 관리자 비밀번호. 비어 있으면(로컬 개발) 관리자 기능이 인증 없이 열린다. 서버에서는 .env 에 꼭 설정할 것.
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
 TYPES = {
     # 열섬 줄이기 개선 제안
@@ -52,6 +58,9 @@ TYPES = {
     "noise": "소음",
     "other": "기타",
 }
+# 처리 상태 (공무원이 대시보드에서 바꾼다)
+STATUSES = {"received": "접수", "working": "처리중", "done": "처리 완료"}
+
 # 예전 유형 (이미 저장된 데이터 표시용, 새 등록은 불가)
 LEGACY_TYPES = {"streetlight": "가로등", "bench": "벤치", "walkway": "보행로 개선"}
 TYPE_NAMES = {**TYPES, **LEGACY_TYPES}
@@ -74,7 +83,10 @@ CREATE TABLE IF NOT EXISTS complaints (
     likes       INTEGER NOT NULL DEFAULT 0,
     ai_urgency  INTEGER,
     ai_tag      TEXT,
-    created_at  TEXT    NOT NULL
+    created_at  TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'received',
+    reply       TEXT,
+    status_at   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_complaints_zone ON complaints(zone);
 CREATE TABLE IF NOT EXISTS env_log (
@@ -101,6 +113,11 @@ def init_db():
     with db() as conn:
         conn.executescript(SCHEMA)
         conn.execute("PRAGMA journal_mode=WAL")
+        # 예전에 만든 DB(상태 컬럼 없음)도 그대로 쓸 수 있게 컬럼을 덧붙인다
+        have = {r[1] for r in conn.execute("PRAGMA table_info(complaints)")}
+        for col, ddl in (("status", "TEXT NOT NULL DEFAULT 'received'"), ("reply", "TEXT"), ("status_at", "TEXT")):
+            if col not in have:
+                conn.execute(f"ALTER TABLE complaints ADD COLUMN {col} {ddl}")
 
 
 init_db()
@@ -136,8 +153,21 @@ class ComplaintIn(BaseModel):
     text: str = Field(min_length=1, max_length=200)
 
 
-class Ask(BaseModel):
-    text: str
+class Login(BaseModel):
+    password: str
+
+
+class Update(BaseModel):
+    status: str | None = None
+    reply: str | None = Field(default=None, max_length=300)
+
+
+def require_admin(x_admin_token: str | None = Header(default=None)):
+    """관리자 전용 API 보호. ADMIN_PASSWORD 가 비어 있으면 통과(로컬 개발)."""
+    if not ADMIN_PASSWORD:
+        return
+    if not x_admin_token or not hmac.compare_digest(x_admin_token.encode(), ADMIN_PASSWORD.encode()):
+        raise HTTPException(401, "관리자 비밀번호가 필요합니다.")
 
 
 # ---------------------------------------------------------------- 도배 방지 (아주 단순)
@@ -217,14 +247,105 @@ def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks):
     return row_to_dict(row)
 
 
+_liked: set[tuple] = set()
+
+
 @app.post("/api/complaints/{cid}/like")
-def like_complaint(cid: int):
+def like_complaint(cid: int, request: Request, x_client_id: str | None = Header(default=None)):
+    # 한 사람이 같은 민원에 여러 번 공감하는 것 방지. 같은 와이파이(같은 IP)를 여럿이 써도 되도록
+    # 브라우저가 만든 X-Client-Id 로 구분하고, 없으면 IP 로 구분한다.
+    who = (x_client_id or "")[:64] or (request.client.host if request.client else "?")
+    if (who, cid) in _liked:
+        raise HTTPException(409, "이미 공감하셨어요.")
     with _db_lock, db() as conn:
         cur = conn.execute("UPDATE complaints SET likes = likes + 1 WHERE id = ?", (cid,))
         if cur.rowcount == 0:
             raise HTTPException(404, "없는 민원입니다.")
         row = conn.execute("SELECT * FROM complaints WHERE id = ?", (cid,)).fetchone()
+    _liked.add((who, cid))
     return row_to_dict(row)
+
+
+@app.get("/api/complaints/sync")
+def sync_complaints():
+    """시민 페이지가 8초마다 부르는 가벼운 목록: 상태·공감 변경과 삭제를 반영하기 위함."""
+    with db() as conn:
+        rows = conn.execute("SELECT id, status, likes, reply FROM complaints ORDER BY id").fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------- 관리자 (처리 상태·삭제·백업)
+
+
+@app.get("/api/admin/auth")
+def admin_auth():
+    return {"required": bool(ADMIN_PASSWORD)}
+
+
+@app.post("/api/admin/login")
+def admin_login(body: Login):
+    if ADMIN_PASSWORD and not hmac.compare_digest(body.password.encode(), ADMIN_PASSWORD.encode()):
+        raise HTTPException(401, "비밀번호가 맞지 않아요.")
+    return {"ok": True}
+
+
+@app.patch("/api/complaints/{cid}")
+def update_complaint(cid: int, body: Update, _=Depends(require_admin)):
+    sets, args = [], []
+    if body.status is not None:
+        if body.status not in STATUSES:
+            raise HTTPException(400, f"알 수 없는 상태입니다: {body.status}")
+        sets += ["status = ?", "status_at = ?"]
+        args += [body.status, now_kst()]
+    if body.reply is not None:
+        sets.append("reply = ?")
+        args.append(body.reply.strip() or None)
+    if not sets:
+        raise HTTPException(400, "바꿀 내용이 없습니다.")
+    with _db_lock, db() as conn:
+        cur = conn.execute(f"UPDATE complaints SET {', '.join(sets)} WHERE id = ?", (*args, cid))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "없는 민원입니다.")
+        row = conn.execute("SELECT * FROM complaints WHERE id = ?", (cid,)).fetchone()
+    return row_to_dict(row)
+
+
+@app.delete("/api/complaints/{cid}")
+def delete_complaint(cid: int, _=Depends(require_admin)):
+    with _db_lock, db() as conn:
+        cur = conn.execute("DELETE FROM complaints WHERE id = ?", (cid,))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "없는 민원입니다.")
+    return {"deleted": cid}
+
+
+@app.get("/api/admin/backup")
+def admin_backup(bg: BackgroundTasks, _=Depends(require_admin)):
+    """DB 파일을 통째로 내려받기 (행사 끝나면 서버가 삭제되므로)."""
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    src, dst = sqlite3.connect(DB_PATH), sqlite3.connect(tmp)
+    try:
+        src.backup(dst)
+    finally:
+        src.close(); dst.close()
+    bg.add_task(os.remove, tmp)
+    name = f"grid-backup-{datetime.now(KST):%Y%m%d_%H%M}.db"
+    return FileResponse(tmp, filename=name, media_type="application/octet-stream")
+
+
+@app.get("/api/qr")
+def qr_svg(url: str):
+    """접속 QR 코드(SVG). 대시보드의 'QR' 버튼과 인쇄용."""
+    if not url.startswith(("http://", "https://")) or len(url) > 300:
+        raise HTTPException(400, "http(s) 주소만 만들 수 있어요.")
+    import qrcode
+    from qrcode.image.svg import SvgPathImage
+
+    img = qrcode.make(url, image_factory=SvgPathImage, box_size=10, border=2)
+    buf = io.BytesIO()
+    img.save(buf)
+    return Response(buf.getvalue(), media_type="image/svg+xml")
 
 
 @app.get("/api/stats")
@@ -383,11 +504,6 @@ def ai_policy():
         data = {"text": text, "generated_at": now_kst(), "ai": False}
     _policy_cache.update(key=key, data=data)
     return data
-
-
-@app.post("/api/ai/explain")
-def explain(req: Ask):
-    return {"answer": ask_model(req.text[:500])}
 
 
 # 로컬 개발용: http://localhost:8000/ 에서 web/ 을 바로 열 수 있게
