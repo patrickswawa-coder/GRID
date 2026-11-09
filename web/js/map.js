@@ -72,11 +72,8 @@ export function heightAt(map, x, z) {
   return map.heights[z * map.meta.width + x];
 }
 
-export function cellToLatLng(meta, x, z) {
-  const lat = meta.origin_lat - ((z + 0.5) * meta.cell) / 111320;
-  const lng = meta.origin_lng + ((x + 0.5) * meta.cell) / (111320 * Math.cos((meta.origin_lat * Math.PI) / 180));
-  return { lat: +lat.toFixed(6), lng: +lng.toFixed(6) };
-}
+// 경위도 변환은 geo.js (정확한 TM 공식). 예전 이름 그대로 쓰도록 다시 내보냄
+export { cellToLatLng, latLngToCell } from "./geo.js";
 
 export function zoneOf(meta, x, z) {
   const s = meta.zone_size || 40;

@@ -13,7 +13,7 @@ OUT = Path(__file__).resolve().parents[1] / "web" / "data" / "voxels.json"
 
 
 def save(path, *, name, cell, origin_lat, origin_lng, ground: np.ndarray, heights: np.ndarray,
-         kinds: np.ndarray, zone_size=40, source="sample"):
+         kinds: np.ndarray, zone_size=40, source="sample", tm=None):
     """ground/heights/kinds: (depth, width) 배열. heights=0 이면 건물 없음."""
     depth, width = ground.shape
     zs, xs = np.nonzero(heights)
@@ -23,6 +23,8 @@ def save(path, *, name, cell, origin_lat, origin_lng, ground: np.ndarray, height
             "name": name, "cell": cell, "width": int(width), "depth": int(depth),
             "origin_lat": round(origin_lat, 6), "origin_lng": round(origin_lng, 6),
             "zone_size": zone_size, "source": source,
+            # 격자 원점 (EPSG:5186 미터) — 경위도 변환을 정확히 하려면 필요 (web/js/geo.js, backend/geo.py)
+            **({"tm": tm} if tm else {}),
         },
         "ground": base64.b64encode(ground.astype(np.uint8).tobytes()).decode(),
         "buildings": flat,
@@ -34,9 +36,11 @@ def save(path, *, name, cell, origin_lat, origin_lng, ground: np.ndarray, height
 
 
 def cell_to_latlng(meta, x, z):
-    lat = meta["origin_lat"] - (z + 0.5) * meta["cell"] / 111320
-    lng = meta["origin_lng"] + (x + 0.5) * meta["cell"] / (111320 * math.cos(math.radians(meta["origin_lat"])))
-    return lat, lng
+    """정확한 TM 변환은 backend/geo.py 와 공유 (서버도 같은 공식으로 다시 계산함)"""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+    import geo
+    return geo.cell_to_latlng(meta, x, z)
 
 
 def zone_of(meta, x, z):

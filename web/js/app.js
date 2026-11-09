@@ -1,7 +1,7 @@
 // 시민용 화면: 지도 탭 → 유형 선택 → 의견 입력 → 등록, 다른 민원 보기·공감
 import * as THREE from "three";
 import { MapControls } from "three/addons/controls/MapControls.js";
-import { loadMap, buildScene, heightAt, cellToLatLng, zoneOf } from "./map.js";
+import { loadMap, buildScene, heightAt, cellToLatLng, latLngToCell, zoneOf } from "./map.js";
 import { makeMarker } from "./markers.js";
 import { loadLabels } from "./labels.js";
 import { computeHeat, paintHeat, heatLevel, zoneHeat, scoreAt, buildMods, meanHeat, heatRGB } from "./heat.js";
@@ -230,8 +230,7 @@ function enterSpot() {
   const m = map.meta;
   let x, z;
   if (SPOT_Q.lat != null) {
-    x = Math.floor(((SPOT_Q.lng - m.origin_lng) * 111320 * Math.cos((m.origin_lat * Math.PI) / 180)) / m.cell);
-    z = Math.floor(((m.origin_lat - SPOT_Q.lat) * 111320) / m.cell);
+    ({ x, z } = latLngToCell(m, SPOT_Q.lat, SPOT_Q.lng)); // 정확한 TM 변환 (geo.js)
   } else {
     x = Math.floor(SPOT_Q.x); z = Math.floor(SPOT_Q.z);
   }

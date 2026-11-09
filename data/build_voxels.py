@@ -254,7 +254,8 @@ def main():
     rasterize(geoms[order], np.array(kinds_v)[order], xs, ys, kinds)
 
     vf.save(a.out, name="원주시 무실동", cell=a.cell, origin_lat=n, origin_lng=w,
-            ground=ground, heights=heights, kinds=kinds, source="vworld")
+            ground=ground, heights=heights, kinds=kinds, source="vworld",
+            tm={"crs": METRIC, "x0": round(mx0, 3), "y1": round(my1, 3)})  # 격자 원점: 정확한 경위도 변환용
 
 
 if __name__ == "__main__":
