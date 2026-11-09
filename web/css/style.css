@@ -47,9 +47,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3f5; ove
   background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
   box-shadow: 0 -6px 24px rgba(0,0,0,.15);
-  transform: translateY(110%); transition: transform .25s ease;
+  transform: translateY(110%); transition: transform .38s cubic-bezier(.2,.8,.2,1);
 }
 .sheet.open { transform: translateY(0); }
+/* 접힌 상태: 위쪽(손잡이·제목·열섬 지수)만 보인다 */
+.sheet.open.peek { transform: translateY(calc(100% - var(--peek, 120px))); overflow: hidden; }
+.sheet.dragging { transition: none; }
+.sheet-top { cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.grabber { width: 42px; height: 5px; border-radius: 3px; background: #ced4da; margin: -6px auto 10px; }
+.peek-hint { display: none; text-align: center; font-size: 13px; font-weight: 700; color: var(--brand); margin: -2px 0 6px; }
+.sheet.peek .peek-hint { display: block; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .sheet h2 { font-size: 17px; margin: 0; }
 .chip { background: #eef3ff; color: var(--brand); font-weight: 600; font-size: 13px; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
@@ -238,3 +245,22 @@ body.sheet-open .probe, body.sheet-open .crosshair { display: none; }
 .badge { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-left: 6px; }
 .badge.received { background: #fff3bf; color: #8a6d00; } .badge.working { background: #d0ebff; color: #1864ab; } .badge.done { background: #d3f9d8; color: #2b8a3e; }
 .d-reply { margin: 6px 0 4px; padding: 8px 10px; border-radius: 10px; background: #e7f5ff; color: #1864ab; font-size: 14px; line-height: 1.45; }
+
+@media (max-width: 480px) {
+  /* 폰: 화면 가운데를 덜 가리게 조금 작게 */
+  .probe.center { font-size: 12px; padding: 5px 9px; transform: translate(-50%, 20px); }
+  .probe.center .v { font-size: 18px; }
+}
+
+/* ---- 지자체 대시보드 링크 (리포트 패널 아래, 도움말) */
+.admin-link {
+  display: grid; grid-template-columns: 28px 1fr 18px; align-items: center; gap: 10px;
+  margin-top: 14px; padding: 12px 14px; border-radius: 12px; text-decoration: none; color: var(--ink);
+  background: #eef3ff; border: 1.5px solid #d0dcff;
+}
+.admin-link:hover { background: #e2eaff; }
+.admin-link span:first-child { font-size: 22px; }
+.admin-link b { display: block; font-size: 14.5px; color: var(--brand); }
+.admin-link small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.admin-link span:last-child { color: var(--brand); font-weight: 700; }
+.intro-admin { display: block; text-align: center; margin-top: 12px; font-size: 13.5px; color: var(--brand); text-decoration: none; font-weight: 600; }
