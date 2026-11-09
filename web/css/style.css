@@ -233,3 +233,16 @@ body.sheet-open .tools { display: none; }
 .crosshair::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
 .probe.center { left: 50% !important; top: 50% !important; transform: translate(-50%, 22px); text-align: center; }
 body.sheet-open .probe, body.sheet-open .crosshair { display: none; }
+
+/* ---- 지자체 대시보드 링크 (리포트 패널 아래, 도움말) */
+.admin-link {
+  display: grid; grid-template-columns: 28px 1fr 18px; align-items: center; gap: 10px;
+  margin-top: 14px; padding: 12px 14px; border-radius: 12px; text-decoration: none; color: var(--ink);
+  background: #eef3ff; border: 1.5px solid #d0dcff;
+}
+.admin-link:hover { background: #e2eaff; }
+.admin-link span:first-child { font-size: 22px; }
+.admin-link b { display: block; font-size: 14.5px; color: var(--brand); }
+.admin-link small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.admin-link span:last-child { color: var(--brand); font-weight: 700; }
+.intro-admin { display: block; text-align: center; margin-top: 12px; font-size: 13.5px; color: var(--brand); text-decoration: none; font-weight: 600; }
