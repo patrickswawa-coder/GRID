@@ -118,7 +118,7 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 | POST | `/api/ai/explain` | (기존) `{text}` → `{answer}` |
 | GET | `/api/env` | 실시간 `{air:{station,pm10,pm25,o3,grade,pm25_grade}, weather:{temp,humidity,wind}, updated_at, errors}` (10분 캐시, 에어코리아·기상청) |
 | GET | `/api/env/history?hours=48` | `/api/env` 호출 기록 (대시보드 추이) |
-| GET | `/api/priority?limit=30` | 200m 구역별 `{rank, zone, name, score, heat, heat_p90, heat_after, delta, proposals, reports, likes, top_type, lat, lng}` (열섬 × 시민 요구) |
+| GET | `/api/priority?limit=30` | 200m 구역별 `{rank, zone, name, score, heat, heat_p90, heat_after, delta, proposals, reports, likes, top_type, lat, lng, built, paved, green}` (열섬 평균 × 시민 요구, `paved`/`green`은 0~1 토지 구성 비율) |
 | GET | `/api/ai/policy` | 우선 개선 구역 TOP 3 정책 제안 `{text, ai, generated_at}` (AI 실패 시 규칙 기반) |
 
 에러는 FastAPI 기본 형식 `{"detail": "..."}` 을 씁니다.
