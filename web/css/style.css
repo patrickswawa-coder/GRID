@@ -233,3 +233,8 @@ body.sheet-open .tools { display: none; }
 .crosshair::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
 .probe.center { left: 50% !important; top: 50% !important; transform: translate(-50%, 22px); text-align: center; }
 body.sheet-open .probe, body.sheet-open .crosshair { display: none; }
+
+/* 처리 상태 배지 + 공무원 답변 */
+.badge { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12px; font-weight: 700; margin-left: 6px; }
+.badge.received { background: #fff3bf; color: #8a6d00; } .badge.working { background: #d0ebff; color: #1864ab; } .badge.done { background: #d3f9d8; color: #2b8a3e; }
+.d-reply { margin: 6px 0 4px; padding: 8px 10px; border-radius: 10px; background: #e7f5ff; color: #1864ab; font-size: 14px; line-height: 1.45; }

@@ -25,6 +25,12 @@ echo "▶ 3/6 Python 패키지 설치 (1~3분)"
 .venv/bin/pip install -q --upgrade pip
 .venv/bin/pip install -q -r backend/requirements.txt
 
+# .env (키·비밀번호). 없으면 만들고, 관리자 비밀번호가 없으면 무작위로 넣는다. git 에는 올라가지 않는 파일.
+touch .env
+grep -q '^ADMIN_PASSWORD=' .env || echo "ADMIN_PASSWORD=$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
+grep -q '^NAVER_MAP_KEY=' .env || echo "NAVER_MAP_KEY=" >> .env
+chmod 600 .env
+
 echo "▶ 4/6 시민 페이지 복사"
 sudo mkdir -p /var/www/grid
 sudo chown "$ME" /var/www/grid
@@ -41,6 +47,7 @@ User=$ME
 WorkingDirectory=$DIR/backend
 Environment=GRID_DB=$DIR/backend/grid.db
 Environment=AI_ENABLED=1
+Environment=POST_INTERVAL=0.5
 Environment=MODEL_ID=$MODEL_ID
 ExecStart=$DIR/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --proxy-headers
 Restart=always
@@ -93,6 +100,8 @@ if curl -fs localhost/api/health >/dev/null; then
   echo "   시민 페이지 : http://$IP/"
   echo "   대시보드    : http://$IP/admin/"
   echo "   AI 확인     : curl -s localhost/api/ai/summary"
+  echo "   관리자 비밀번호 : $(grep '^ADMIN_PASSWORD=' "$DIR/.env" | cut -d= -f2)   (바꾸려면 nano ~/GRID/.env 후 sudo systemctl restart grid-api)"
+  grep -q '^NAVER_MAP_KEY=.' "$DIR/.env" || echo "   ※ 네이버 지도: ~/GRID/.env 의 NAVER_MAP_KEY= 뒤에 Client ID 를 넣고 sudo systemctl restart grid-api"
 else
   echo "✗ API가 아직 안 떠요. 'sudo journalctl -u grid-api -n 30' 결과를 보내주세요."
 fi

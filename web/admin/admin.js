@@ -28,7 +28,59 @@ async function get(path) {
 }
 const safe = (p) => p.catch(() => null);
 
-let state = { complaints: [], prio: [], meta: null, filter: new Set() };
+const STATUS = { received: "접수", working: "처리중", done: "처리 완료" };
+let state = { complaints: [], prio: [], meta: null, filter: new Set(), sfilter: "" };
+
+// ---------------------------------------------------------------- 관리자 (로그인·상태 변경·삭제)
+const admin = { required: false, token: (() => { try { return sessionStorage.getItem("grid-admin") || ""; } catch { return ""; } })() };
+const canAdmin = () => !admin.required || !!admin.token;
+function setToken(t) { admin.token = t; try { t ? sessionStorage.setItem("grid-admin", t) : sessionStorage.removeItem("grid-admin"); } catch {} updateAdminUI(); }
+function updateAdminUI() {
+  $("btn-login").hidden = !admin.required;
+  $("btn-login").textContent = admin.token ? "🔓 로그아웃" : "🔒 관리자 로그인";
+  $("btn-backup").hidden = !canAdmin();
+  renderComplaints();
+}
+async function initAdmin() {
+  const a = await safe(get("/api/admin/auth"));
+  admin.required = !!a?.required;
+  if (admin.required && admin.token) { // 저장된 토큰이 아직 유효한지
+    const r = await fetch(API + "/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: admin.token }) });
+    if (!r.ok) setToken("");
+  }
+  updateAdminUI();
+}
+$("btn-login").onclick = async () => {
+  if (admin.token) return setToken("");
+  const pw = prompt("관리자 비밀번호");
+  if (!pw) return;
+  const r = await fetch(API + "/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) });
+  r.ok ? setToken(pw) : alert("비밀번호가 맞지 않아요.");
+};
+async function act(path, method, body) {
+  const r = await fetch(API + path, { method, headers: { "Content-Type": "application/json", "X-Admin-Token": admin.token }, body: body ? JSON.stringify(body) : undefined });
+  if (r.status === 401) { setToken(""); alert("관리자 로그인이 필요해요. 위의 '관리자 로그인'을 눌러 주세요."); throw new Error("401"); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { alert(data.detail || "처리하지 못했어요."); throw new Error(String(r.status)); }
+  return data;
+}
+$("btn-backup").onclick = async () => {
+  const r = await fetch(API + "/api/admin/backup", { headers: { "X-Admin-Token": admin.token } });
+  if (!r.ok) return alert("백업에 실패했어요.");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(await r.blob());
+  a.download = `grid-backup-${stamp()}.db`; a.click(); URL.revokeObjectURL(a.href);
+};
+
+// ---------------------------------------------------------------- QR
+function setQr() {
+  const u = $("qrurl").value.trim();
+  $("qrwarn").hidden = !/localhost|127\.0\.0\.1/.test(u);
+  if (/^https?:\/\//.test(u)) $("qrimg").src = API + "/api/qr?url=" + encodeURIComponent(u);
+}
+$("btn-qr").onclick = () => { if (!$("qrurl").value) $("qrurl").value = location.origin + "/"; setQr(); $("qrdlg").showModal(); };
+$("qrurl").oninput = setQr;
+$("qrclose").onclick = () => $("qrdlg").close();
+$("qrprint").onclick = () => print();
 
 // ---------------------------------------------------------------- CSV
 function csv(rows) {
@@ -105,8 +157,9 @@ function drawZoneMap(pr, complaints) {
   const px = cell / s;
   for (const c of complaints) {
     const x = (c.x + 0.5) * px, y = (c.z + 0.5) * px;
+    g.globalAlpha = c.status === "done" ? 0.35 : 1;
     g.beginPath(); g.arc(x, y, 4, 0, 7); g.fillStyle = tColor(c.type); g.fill();
-    g.lineWidth = 1.5; g.strokeStyle = "#fff"; g.stroke();
+    g.lineWidth = 1.5; g.strokeStyle = "#fff"; g.stroke(); g.globalAlpha = 1;
   }
 }
 $("zmap").addEventListener("mousemove", (e) => {
@@ -224,7 +277,18 @@ function redrawMap() {
 }
 
 // ---------------------------------------------------------------- 민원
-function filtered() { return state.filter.size ? state.complaints.filter((c) => state.filter.has(c.type)) : state.complaints; }
+function filtered() {
+  return state.complaints.filter((c) => (!state.filter.size || state.filter.has(c.type)) && (!state.sfilter || c.status === state.sfilter));
+}
+function renderSChips() {
+  const n = (k) => state.complaints.filter((c) => !k || c.status === k).length;
+  $("schips").innerHTML = [["", "전체"], ...Object.entries(STATUS)].map(([k, l]) =>
+    `<button type="button" class="chip" data-s="${k}" aria-pressed="${state.sfilter === k}">${l} ${n(k)}</button>`).join("");
+}
+$("schips").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  state.sfilter = b.dataset.s; renderComplaints();
+});
 
 function renderChips() {
   $("chips").innerHTML = TYPES.map((t) => `<button type="button" class="chip" data-t="${t.code}" aria-pressed="${state.filter.has(t.code)}">${t.icon} ${esc(t.label)}</button>`).join("");
@@ -236,6 +300,7 @@ $("chips").addEventListener("click", (e) => {
 });
 
 function renderComplaints() {
+  renderSChips();
   const df = filtered(), zn = Object.fromEntries(state.prio.map((z) => [z.zone, z.name]));
   if (!df.length) {
     $("kpis").innerHTML = ""; $("bytype").innerHTML = `<p class="cap">${state.complaints.length ? "선택한 유형의 민원이 없어요." : "아직 접수된 민원이 없어요. 시민 페이지에서 첫 민원을 등록해 보세요."}</p>`;
@@ -249,7 +314,8 @@ function renderComplaints() {
   $("kpis").innerHTML = k("전체 민원", df.length + "건") + k("오늘 접수", df.filter((c) => c.created_at.slice(0, 10) === today).length + "건") +
     k("최다 요청", tLabel(byType[0][0]), byType[0][1] + "건") +
     k("최다 구역", (zn[byZone[0][0]] || byZone[0][0]).replace(" 주변", ""), byZone[0][1] + "건") +
-    k("AI 긴급 판정", df.filter((c) => c.ai_urgency === 3).length + "건");
+    k("AI 긴급 판정", df.filter((c) => c.ai_urgency === 3).length + "건") +
+    k("처리 현황", `${df.filter((c) => c.status === "done").length}/${df.length}`, `처리중 ${df.filter((c) => c.status === "working").length} · 접수 ${df.filter((c) => c.status === "received").length}`);
 
   const max = byType[0][1];
   $("bytype").innerHTML = byType.map(([t, n]) => `<div class="row"><span>${esc(tLabel(t))}</span><div class="bar" style="width:${(n / max) * 100}%;background:${tColor(t)}"></div><span class="n">${n}</span></div>`).join("");
@@ -263,11 +329,18 @@ function renderComplaints() {
   $("topzones").innerHTML = `<tr><th>구역</th><th>건수</th><th>공감</th><th>주요 요청</th></tr>` +
     zrows.map((r) => `<tr><td>${esc(zn[r.z] || r.z)}</td><td>${r.n}</td><td>${r.likes}</td><td>${esc(tLabel(r.top))}</td></tr>`).join("");
 
-  const head = ["번호", "유형", "구역", "내용", "공감", "AI 긴급도", "접수 시각"];
-  const rows = [...df].sort((a, b) => b.likes - a.likes || b.id - a.id)
-    .map((c) => [c.id, tLabel(c.type), c.zone, c.text, c.likes, URGENCY[c.ai_urgency] || "", c.created_at.replace("T", " ").slice(0, 19)]);
-  $("list").innerHTML = `<tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr>` +
-    rows.slice(0, 300).map((r) => `<tr>${r.map((c, i) => `<td${i === 3 ? ' class="wrap"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("");
+  const head = ["번호", "유형", "구역", "내용", "공감", "AI 긴급도", "상태", "접수 시각", "답변"];
+  const sorted = [...df].sort((a, b) => b.likes - a.likes || b.id - a.id);
+  const csvRows = sorted.map((c) => [c.id, tLabel(c.type), c.zone, c.text, c.likes, URGENCY[c.ai_urgency] || "", STATUS[c.status] || c.status, c.created_at.replace("T", " ").slice(0, 19), c.reply || ""]);
+  const adm = canAdmin();
+  const opts = (cur) => Object.entries(STATUS).map(([k, l]) => `<option value="${k}"${k === cur ? " selected" : ""}>${l}</option>`).join("");
+  const rowHtml = (c) => `<tr data-id="${c.id}"><td>${c.id}</td><td>${esc(tLabel(c.type))}</td><td>${esc(c.zone)}</td>
+    <td class="wrap">${esc(c.text)}${c.reply ? `<span class="reply">💬 ${esc(c.reply)}</span>` : ""}</td><td>${c.likes}</td><td>${esc(URGENCY[c.ai_urgency] || "")}</td>
+    <td>${adm ? `<select class="st" aria-label="처리 상태">${opts(c.status)}</select>` : `<span class="badge ${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>`}</td>
+    <td>${esc(c.created_at.replace("T", " ").slice(0, 19))}</td>
+    <td>${adm ? `<button class="mini" data-a="reply" type="button">답변</button><button class="mini del" data-a="del" type="button">삭제</button>` : ""}</td></tr>`;
+  $("list").innerHTML = `<tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr>` + sorted.slice(0, 300).map(rowHtml).join("");
+  const rows = csvRows;
   $("dl-list").onclick = () => download(`grid_민원_${stamp()}.csv`, csv([head, ...rows]));
   $("updated").textContent = `마지막 갱신 ${new Date().toLocaleTimeString("ko-KR")}` + (rows.length > 300 ? ` · 화면에는 300건까지, CSV는 전체 ${rows.length}건` : "");
 }
@@ -289,6 +362,28 @@ async function loadAI() {
   } else { $("summary").textContent = "요약을 불러오지 못했어요."; aiAt = 0; }
 }
 
+$("list").addEventListener("change", async (e) => {
+  const sel = e.target.closest("select.st"); if (!sel) return;
+  const id = +sel.closest("tr").dataset.id;
+  try { await act(`/api/complaints/${id}`, "PATCH", { status: sel.value }); } catch {}
+  sel.blur(); refresh();
+});
+$("list").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-a]"); if (!btn) return;
+  const id = +btn.closest("tr").dataset.id, c = state.complaints.find((x) => x.id === id);
+  try {
+    if (btn.dataset.a === "del") {
+      if (!confirm(`#${id} 민원을 삭제할까요?\n"${c?.text ?? ""}"\n삭제하면 되돌릴 수 없어요.`)) return;
+      await act(`/api/complaints/${id}`, "DELETE");
+    } else {
+      const r = prompt("시민에게 보여줄 처리 안내 (300자까지, 비우면 삭제)", c?.reply || "");
+      if (r === null) return;
+      await act(`/api/complaints/${id}`, "PATCH", { reply: r });
+    }
+  } catch { return; }
+  refresh();
+});
+
 // ---------------------------------------------------------------- 갱신 루프
 async function refresh() {
   const st = $("status");
@@ -296,7 +391,8 @@ async function refresh() {
     const [complaints, prio, env] = await Promise.all([get("/api/complaints?limit=2000"), get("/api/priority?limit=300"), safe(get("/api/env"))]);
     if (!state.meta) state.meta = await safe(get("/api/meta"));
     state.complaints = complaints; state.prio = prio;
-    renderEnv(env); renderTop3(prio); renderPrioTable(prio); redrawMap(); drawQuadrant(prio); renderComplaints();
+    renderEnv(env); renderTop3(prio); renderPrioTable(prio); redrawMap(); drawQuadrant(prio);
+    if (!document.activeElement?.matches?.("select.st")) renderComplaints(); else renderSChips();
     st.className = "status ok"; st.textContent = "● 실시간 · 10초마다 갱신";
     loadAI();
   } catch (e) {
@@ -304,6 +400,6 @@ async function refresh() {
   }
 }
 renderChips();
-refresh().then(initNaver);
+initAdmin().then(refresh).then(initNaver);
 setInterval(refresh, REFRESH_MS);
 addEventListener("resize", () => state.prio.length && mapMode === "grid" && drawZoneMap(state.prio, state.complaints));

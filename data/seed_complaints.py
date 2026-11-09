@@ -94,7 +94,9 @@ def main():
         if a.delay:
             time.sleep(a.delay)
         for _ in range(random.choices([0, 1, 3, 8], weights=[5, 3, 2, 1])[0]):
-            urllib.request.urlopen(urllib.request.Request(f"{a.api}/api/complaints/{cid}/like", method="POST"))
+            # 서버가 '한 사람 한 번' 공감만 받으므로 공감마다 다른 사람(X-Client-Id)인 척 보낸다
+            urllib.request.urlopen(urllib.request.Request(f"{a.api}/api/complaints/{cid}/like", method="POST",
+                                   headers={"X-Client-Id": f"seed-{random.random()}"}))
     print(f"{a.n - skipped}건 등록 완료" + (f" (중복 {skipped}건 건너뜀)" if skipped else ""))
 
 
