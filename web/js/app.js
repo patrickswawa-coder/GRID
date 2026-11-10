@@ -331,9 +331,20 @@ function updatePin() {
   }
 }
 
+// 카메라가 멀어지면 near 도 같이 밀어 깊이 정밀도를 지킨다 (최대 축소 때 얇은 판들이 깜빡이지 않게)
+let lastNear = camera.near;
+function fitNear() {
+  const near = THREE.MathUtils.clamp(camera.position.distanceTo(controls.target) * 0.01, 0.5, 20);
+  if (Math.abs(near - lastNear) / lastNear > 0.05) {
+    camera.near = lastNear = near;
+    camera.updateProjectionMatrix();
+  }
+}
+
 function loop() {
   requestAnimationFrame(loop);
   controls.update();
+  fitNear();
   if (map) {
     // 지도 밖으로 너무 나가지 않게
     const t = controls.target;

@@ -211,8 +211,13 @@ export function buildScene(map) {
   group.add(ground);
 
   // 땅 덩어리 아래 흙 (떠 있는 섬 느낌)
-  const dirt = new THREE.Mesh(new THREE.BoxGeometry(W, 3, D), voxelize(new THREE.MeshLambertMaterial({ color: 0x8b5a2b })));
-  dirt.position.set(W / 2, -1.65, D / 2); // 지면과 겹쳐 깜빡이지 않게 살짝 아래로
+  // 윗면은 지면에 가려 안 보이므로 그리지 않는다. 그리면 멀리서 볼 때(최대 축소) 휴대폰에서
+  // 깊이 정밀도가 모자라 갈색 윗면이 지면을 뚫고 깜빡인다 (z-fighting)
+  const dirtMat = voxelize(new THREE.MeshLambertMaterial({ color: 0x8b5a2b }));
+  const noTop = new THREE.MeshBasicMaterial({ visible: false });
+  // BoxGeometry 면 순서: +x, -x, +y(윗면), -y, +z, -z
+  const dirt = new THREE.Mesh(new THREE.BoxGeometry(W, 3, D), [dirtMat, dirtMat, noTop, dirtMat, dirtMat, dirtMat]);
+  dirt.position.set(W / 2, -1.6, D / 2); // 옆면 윗변이 지면 바로 아래에 오게
   group.add(dirt);
 
   // 건물: 칸마다 기둥 하나 (InstancedMesh 한 번에)
