@@ -38,7 +38,7 @@
       </div>
     </div>
     <div class="bar-right">
-      <span class="count" title="지금까지 모인 시민 제안"><svg class="ico"><use href="#i-pin"/></svg><span id="count">0</span></span>
+      <button id="count-btn" class="count" type="button" aria-pressed="false" aria-label="다른 시민 제안 보기" title="다른 시민 제안 보기·숨기기"><svg class="ico"><use href="#i-pin"/></svg><span id="count">0</span></button>
       <button id="tool-help" class="icon-btn" type="button" aria-label="도움말"><svg class="ico"><use href="#i-help"/></svg></button>
     </div>
   </header>
@@ -66,6 +66,9 @@
     <section><h3>🌱 시민 제안 효과</h3><div id="r-sim"></div></section>
     <section><h3>📢 유형별 제안·신고 <small>(눌러서 지도에서 숨기기)</small></h3><div id="r-types" class="r-types"></div></section>
     <section class="r-settings">
+      <button id="tool-others" class="setting" type="button" aria-pressed="false">
+        <svg class="ico"><use href="#i-pin"/></svg><span>다른 시민 제안 보기</span><i class="switch" aria-hidden="true"></i>
+      </button>
       <button id="tool-labels" class="setting" type="button" aria-pressed="true">
         <svg class="ico"><use href="#i-tag"/></svg><span>지도에 장소 이름 보기</span><i class="switch" aria-hidden="true"></i>
       </button>
@@ -80,6 +83,7 @@
         <li>빨간 곳일수록 <b>여름에 열이 많이 쌓이는 곳</b>이에요.</li>
         <li>바꾸고 싶은 곳을 <b>눌러서</b> 가로수·그늘막 같은 <b>개선 블록</b>을 놓아요. 놓기 전에 <b>지수가 얼마나 내려갈지</b> 보여드려요.</li>
         <li>아래 <b>제안 반영 후</b>를 누르면 시민 제안이 모두 실현된 동네를 볼 수 있어요.</li>
+        <li>위쪽 <b>제안 수</b>를 누르면 다른 시민이 남긴 제안도 보고 공감할 수 있어요.</li>
       </ol>
       <details class="method">
         <summary>열섬 지수는 어떻게 계산하나요?</summary>
