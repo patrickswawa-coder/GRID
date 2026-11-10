@@ -484,6 +484,57 @@ async function refresh() {
     st.className = "status err"; st.textContent = "서버에 연결할 수 없어요";
   }
 }
+// ---------------------------------------------------------------- 근거: 위성 표면온도 비교
+// web/data/lst_compare.json (data/export_lst.py 로 만듦). 없으면 docs/HEAT.md 에 적힌 보정 결과로 숫자·막대만 보여준다.
+const LST_FALLBACK = {
+  scenes: ["2023-06-17", "2024-06-03", "2024-06-11", "2024-08-14", "2025-06-22"], r100: 0.88, slope10: 1.3, points: null,
+  types: [{ name: "저층 건물", dT: 4.1 }, { name: "중층 건물", dT: 4.5 }, { name: "고층 건물(40m+)", dT: 2.8 }, { name: "차도", dT: 2.6 },
+          { name: "인도·대지", dT: 3.3 }, { name: "공원·숲", dT: -3.3 }, { name: "잔디·밭", dT: 0.1 }, { name: "하천", dT: 0.4 }],
+};
+async function initLst() {
+  const d = (await safe(fetch("../data/lst_compare.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject())))) || LST_FALLBACK;
+  $("lst-r").textContent = d.r100.toFixed(2);
+  $("lst-k").textContent = `${d.slope10.toFixed(1)}°C`;
+  $("lst-n").textContent = `${d.scenes.length}장면`;
+  $("lst-dates").textContent = `Landsat 여름 장면 (${d.scenes[0].slice(0, 4)}~${d.scenes.at(-1).slice(0, 4)})`;
+  $("lst-dates").title = d.scenes.join(", ");
+  $("lst-src").textContent = "Landsat 8·9";
+
+  if (!d.points?.length) emptyChart("lst-scatter", "구역별 비교 그림은 위성 자료를 받으면 표시돼요.<br>(서버에서 data/export_lst.py 실행)");
+  else {
+    const ch = chart("lst-scatter");
+    const line = [0, 100].map((x) => [x, d.intercept + (d.slope10 / 10) * x]);
+    ch?.setOption({
+      animation: false, textStyle: { fontFamily: FONT },
+      grid: { left: 50, right: 16, top: 16, bottom: 44 },
+      tooltip: { ...TIP, trigger: "item", formatter: (p) => p.seriesIndex ? "" : `열섬 지수 ${p.value[0]}<br>위성 표면온도 ${p.value[1] >= 0 ? "+" : ""}${p.value[1].toFixed(1)}°C` },
+      xAxis: { ...AXIS, type: "value", min: 0, max: 100, name: "열섬 지수 (100m 구역 평균)", nameLocation: "middle", nameGap: 28 },
+      yAxis: { ...AXIS, type: "value", name: "위성 표면온도, 동네 평균 대비 (°C)", nameLocation: "middle", nameGap: 34, axisLine: { show: false },
+        axisLabel: { ...AXIS.axisLabel, formatter: (v) => (v > 0 ? "+" : "") + v } },
+      series: [
+        { type: "scatter", symbolSize: 6, itemStyle: { color: C.ink, opacity: 0.35 }, data: d.points },
+        { type: "line", data: line, symbol: "none", silent: true, lineStyle: { color: C.heat, width: 2 },
+          endLabel: { show: true, formatter: `r = ${d.r100.toFixed(2)}`, color: C.heat, fontFamily: FONT, fontWeight: 700, fontSize: 12.5, offset: [-60, -12] } },
+      ],
+    }, true);
+  }
+
+  const rows = [...d.types].sort((a, b) => a.dT - b.dT);
+  const lim = Math.ceil(Math.max(...rows.map((t) => Math.abs(t.dT))) + 1);
+  chart("lst-types")?.setOption({
+    animation: false, textStyle: { fontFamily: FONT },
+    grid: { left: 8, right: 8, top: 4, bottom: 4, containLabel: true },
+    tooltip: { ...TIP, trigger: "item", formatter: (p) => `<b>${esc(p.name)}</b><br>무실동 평균보다 ${p.value >= 0 ? "+" : ""}${p.value.toFixed(1)}°C` },
+    xAxis: { type: "value", min: -lim, max: lim, show: false },
+    yAxis: { type: "category", data: rows.map((t) => t.name), axisLine: { onZero: false, show: false }, axisTick: { show: false },
+      axisLabel: { color: C.ink, fontFamily: FONT, fontSize: 12.5 } },
+    series: [{ type: "bar", barWidth: 12,
+      data: rows.map((t) => ({ value: t.dT, itemStyle: { color: t.dT >= 0 ? C.heat : C.fix, borderRadius: t.dT >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4] },
+        label: { position: t.dT >= 0 ? "right" : "left" } })),
+      label: { show: true, color: C.ink, fontFamily: FONT, fontSize: 12, fontWeight: 600, formatter: (p) => `${p.value >= 0 ? "+" : ""}${p.value.toFixed(1)}°C` } }],
+  }, true);
+}
+
 // 5m 열섬 지도: 시민 화면과 같은 지도 파일·같은 계산을 쓴다 (못 읽으면 구역 평균색으로 대신 그림)
 async function initHeat() {
   try {
@@ -498,6 +549,7 @@ async function initHeat() {
 renderChips();
 initAdmin().then(refresh).then(initNaver);
 initHeat();
+initLst();
 setInterval(refresh, REFRESH_MS);
 addEventListener("resize", () => {
   if (state.prio.length && mapMode === "grid") drawZoneMap(state.prio, state.complaints);

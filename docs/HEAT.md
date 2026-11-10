@@ -25,6 +25,7 @@
 - 자료: **Landsat 8·9 Collection 2 Level-2 표면온도(ST_B10)**, 무실동이 맑은 여름 5장면
   (2023-06-17, 2024-06-03, 2024-06-11, 2024-08-14, 2025-06-22). Microsoft Planetary Computer에서 키 없이 받음
 - 재현: `python data/fetch_lst.py` → `data/raw/muksil_lst.tif`, `python data/calibrate_lst.py` → 아래 숫자
+- 대시보드 그림: `python data/export_lst.py` → `web/data/lst_compare.json` (100m 구역별 지수·위성 온도, 바닥 종류별 온도). 파일이 없으면 대시보드는 아래 숫자만 보여줌
 - 장면마다 무실동 평균과의 차이(°C)를 구해 평균 → 지도 5m 격자로 맞춘 뒤 30m·100m 구역 평균으로 비교
 - **결과**
 

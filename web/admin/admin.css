@@ -129,6 +129,15 @@ h3 { font-size: 15px; letter-spacing: -.2px; margin: 0; }
 .prog-key b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .prog-key i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
 
+/* 근거 */
+.evid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; }
+.evid-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+.evid-stats div { background: var(--mist); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.evid-stats b { display: block; font-size: 24px; letter-spacing: -.5px; line-height: 1.25; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.evid-stats span { display: block; font-size: 12px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart.short { height: 250px; }
+.evid .panel > .cap:last-child { margin-top: 6px; }
+
 /* 표·목록 */
 .filters { display: grid; gap: 8px; margin-bottom: 12px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -166,6 +175,7 @@ dialog input { display: block; width: 100%; margin-top: 4px; padding: 7px 9px; b
   .hero { grid-template-columns: 1fr; }
   .three { grid-template-columns: 1fr 1fr; }
   .three .panel:last-child { grid-column: 1 / -1; }
+  .evid { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
   main { padding: 14px 14px 50px; }
