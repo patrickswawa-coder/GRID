@@ -173,6 +173,7 @@ async function start() {
   $("#heatTop").textContent = `${nearestLabel(zh[0][0])} (${zh[0][1]})`;
   // 주제(환경데이터 시각화)상 열섬 지도는 기본으로 켠다. 재방문·QR 진입도 같게. ?noheat 이면 끈 채로 시작
   if (!QS.has("noheat")) setHeat(true, true);
+  else syncView();
   loadEnv();
   setInterval(loadEnv, 10 * 60 * 1000);
   const { width: W, depth: D } = map.meta;
@@ -191,7 +192,7 @@ async function start() {
   let seen = false;
   try { seen = localStorage.getItem("grid-intro") === "1"; } catch {}
   if (!seen && !new URLSearchParams(location.search).has("demo")) $("#intro").hidden = false;
-  else toast("바꾸고 싶은 위치를 눌러 주세요 👆", 3500);
+  else toast("바꾸고 싶은 곳을 눌러 주세요", 3500);
 }
 
 // ---------------------------------------------------------------- 거리 QR 위치 모드
@@ -1054,11 +1055,27 @@ function setHeat(on, quiet = false) {
   heatOn = on;
   if (!on && simOn) setSim(false, true);
   paintHeat(world, map, simOn ? heatSim : heat, on);
-  $("#tool-heat").setAttribute("aria-pressed", String(on));
   $("#legend").hidden = !on;
-  if (on && !quiet) toast("빨간 곳일수록 여름철 열이 많이 쌓이는 곳이에요 🌡️", 3500);
+  syncView();
+  if (on && !quiet) toast("빨간 곳일수록 여름철 열이 많이 쌓이는 곳이에요", 3500);
 }
-$("#tool-heat").onclick = () => heat && setHeat(!heatOn);
+// 아래 보기 전환: 지도 | 열섬 | 제안 반영 후 — 셋 중 하나만 켜진다
+function syncView() {
+  $("#view-plain").setAttribute("aria-pressed", String(!heatOn));
+  $("#tool-heat").setAttribute("aria-pressed", String(heatOn && !simOn));
+  $("#tool-sim").setAttribute("aria-pressed", String(simOn));
+}
+$("#view-plain").onclick = () => heat && heatOn && setHeat(false);
+$("#tool-heat").onclick = () => {
+  if (!heat) return;
+  if (simOn) setSim(false, true);
+  if (!heatOn) setHeat(true, true);
+};
+$("#legend").onclick = () => {
+  const el = $("#legend"), open = !el.classList.contains("expanded");
+  el.classList.toggle("expanded", open);
+  el.setAttribute("aria-expanded", String(open));
+};
 
 // ---------------------------------------------------------------- 시민 제안 효과 시뮬레이션
 // 영향권(지수가 0.5 이상 내려간 칸)만 따로 평균 — 동네 전체 평균은 면적이 커서 변화가 묻힌다
@@ -1076,22 +1093,22 @@ function proposals() {
 }
 function setSim(on, quiet = false) {
   simOn = on;
-  $("#tool-sim").setAttribute("aria-pressed", String(on));
   if (on) {
     heatSim = computeHeat(map, buildMods(map, expandAll(proposals()), TYPE_BY_CODE));
     if (!heatOn) setHeat(true, true);
     paintHeat(world, map, heatSim, true);
     const st = simStats(heat, heatSim);
     $("#heatAvg").innerHTML = `${Math.round(baseAvg)} · 제안 영향권 ${st.ha.toFixed(1)}ha <span style="color:#2f9e44">${Math.round(st.before)} → ${Math.round(st.after)}</span>`;
-    if (!quiet) toast(`시민 제안 ${proposals().length}건이 실현되면 영향권 ${st.ha.toFixed(1)}ha가 평균 ${Math.round(st.before)} → ${Math.round(st.after)}로 시원해져요 ✨`, 5000);
+    if (!quiet) toast(proposals().length ? `시민 제안 ${proposals().length}건이 실현되면 영향권 ${st.ha.toFixed(1)}ha가 평균 ${Math.round(st.before)} → ${Math.round(st.after)}로 시원해져요` : "아직 개선 제안이 없어요. 지도를 눌러 첫 제안을 해 보세요", 5000);
   } else {
     heatSim = null;
     $("#heatAvg").textContent = Math.round(baseAvg);
     if (heatOn) paintHeat(world, map, heat, true);
   }
+  syncView();
   renderReport();
 }
-$("#tool-sim").onclick = () => heat && setSim(!simOn);
+$("#tool-sim").onclick = () => heat && !simOn && setSim(true);
 function onProposalsChanged() {
   if (simOn) setSim(true, true);
   else renderReport();
@@ -1195,7 +1212,7 @@ function renderReport() {
       영향권 <b>${st.ha.toFixed(1)}ha</b>의 평균 열섬 지수<br><span class="big">${Math.round(st.before)} → ${Math.round(st.after)}</span>
       <b style="color:#2f9e44">(−${Math.round(st.before - st.after)})</b><br>
       3점 이상 시원해지는 곳 <b>${st.bigHa.toFixed(1)}ha</b> · 무실동 전체 평균 ${baseAvg.toFixed(1)} → ${meanHeat(sim).toFixed(1)}</div>
-      ${simOn ? "" : `<p class="hint">✨ 제안 효과 버튼을 누르면 지도에서 볼 수 있어요</p>`}`;
+      ${simOn ? "" : `<p class="hint">아래 '제안 반영 후'를 누르면 지도에서 볼 수 있어요</p>`}`;
   }
   // 유형별 개수 (누르면 숨기기)
   const counts = {};
@@ -1292,17 +1309,18 @@ async function loadEnv() {
     lastEnv = d;
     renderReport();
     const w = d.weather, a = d.air;
-    if (!w && !a) return;
     const parts = [];
-    if (w && w.temp != null) parts.push(`🌡️ <b>${w.temp.toFixed(1)}°C</b> <small>습도 ${w.humidity ?? "-"}%</small>`);
+    if (w && w.temp != null) parts.push(`지금 <b>${w.temp.toFixed(1)}°C</b>`);
     if (a && a.pm25 != null) {
       const g = a.pm25_grade || a.grade || "";
-      parts.push(`<span class="env-dot" style="background:${AIR_COLOR[g] || "#868e96"}"></span>초미세먼지 <b>${a.pm25}</b> <small>${g}</small>`);
+      parts.push(`<span class="env-dot" style="background:${AIR_COLOR[g] || "#868e96"}"></span>초미세먼지 ${g || a.pm25}`);
     }
-    const src = [w && "기상청", a && `에어코리아 ${a.station}`].filter(Boolean).join(" · ");
-    $("#envNow").innerHTML = `${parts.join("<br>")}<br><small>지금 무실동 · ${src}</small>`;
-    $("#envNow").hidden = false;
-  } catch {}
+    const src = [w && "기상청", a && `에어코리아 ${a.station}`].filter(Boolean).join(", ");
+    $("#envNow").innerHTML = parts.length ? parts.join("<i class=\"sep\"></i>") : "시민이 함께 만드는 시원한 동네";
+    $("#envNow").title = src ? `실시간 출처: ${src}` : "";
+  } catch {
+    $("#envNow").textContent = "시민이 함께 만드는 시원한 동네";
+  }
 }
 
 // ---------------------------------------------------------------- 토스트

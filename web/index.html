@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#bfe3f5">
   <title>GRID · 우리 동네 열섬 지도</title>
+  <link rel="preload" href="vendor/fonts/galmuri11-bold-sub.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="vendor/fonts/pretendard/pretendardvariable-dynamic-subset.css">
   <link rel="stylesheet" href="css/style.css">
   <script type="importmap">
     { "imports": {
@@ -14,29 +16,48 @@
   </script>
 </head>
 <body>
+  <!-- 아이콘: Lucide (ISC) — 화면 장식이 아니라 버튼 표시용 -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-report" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" /></symbol>
+    <symbol id="i-locate" viewBox="0 0 24 24"><line x1="2" x2="5" y1="12" y2="12" /> <line x1="19" x2="22" y1="12" y2="12" /> <line x1="12" x2="12" y1="2" y2="5" /> <line x1="12" x2="12" y1="19" y2="22" /> <circle cx="12" cy="12" r="7" /> <circle cx="12" cy="12" r="3" /></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /> <path d="M12 17h.01" /></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" /> <path d="M12 8v6" /> <path d="M9 11h6" /></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /> <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /></symbol>
+  </svg>
   <canvas id="view"></canvas>
 
+  <!-- 위: 이름 · 지금 날씨 · 제안 수 · 도움말 -->
   <header class="bar">
-    <div class="brand"><b>GRID</b><span id="place">불러오는 중…</span></div>
-    <div class="right">
-      <div class="count"><span id="count">0</span>건의 제안</div>
+    <div class="title-card">
+      <span class="mark" aria-hidden="true">GRID</span>
+      <div class="title-text">
+        <b><span id="place">원주시 무실동</span> 열섬 지도</b>
+        <span id="envNow" class="env-now">지금 날씨를 불러오는 중이에요</span>
+      </div>
+    </div>
+    <div class="bar-right">
+      <span class="count" title="지금까지 모인 시민 제안"><svg class="ico"><use href="#i-pin"/></svg><span id="count">0</span></span>
+      <button id="tool-help" class="icon-btn" type="button" aria-label="도움말"><svg class="ico"><use href="#i-help"/></svg></button>
     </div>
   </header>
 
-  <!-- 오른쪽 도구 막대 -->
-  <nav class="tools" aria-label="지도 도구">
-    <button id="tool-heat" class="tool" data-tip="열이 쌓이는 곳을 색으로 보기" type="button" aria-pressed="false"><span>🌡️</span><small>열섬</small></button>
-    <button id="tool-sim" class="tool" data-tip="시민 제안이 모두 실현되면 얼마나 시원해지는지" type="button" aria-pressed="false"><span>✨</span><small>제안 효과</small></button>
-    <button id="tool-report" class="tool" data-tip="날씨·공기, 뜨거운 곳 TOP 3, 제안 통계" type="button" aria-pressed="false"><span>📊</span><small>리포트</small></button>
-    <button id="tool-labels" class="tool" data-tip="건물·공원 이름 보이기/숨기기" type="button" aria-pressed="true"><span>🏷️</span><small>이름표</small></button>
-    <button id="tool-home" class="tool" data-tip="처음 보던 위치로 돌아가기" type="button"><span>🧭</span><small>처음 위치</small></button>
-    <button id="tool-gps" class="tool" data-tip="지금 내가 있는 곳으로 이동" type="button" hidden><span>📍</span><small>내 위치</small></button>
-    <button id="tool-help" class="tool" data-tip="사용 방법 다시 보기" type="button"><span>❔</span><small>도움말</small></button>
+  <!-- 아래: 지도 보기 전환 + 도구 -->
+  <nav class="dock" aria-label="지도 도구">
+    <div class="view-switch" role="group" aria-label="지도 보기">
+      <button class="tool" id="view-plain" data-tip="색 없이 동네 모습만 보기" type="button" aria-pressed="false">지도</button>
+      <button class="tool" id="tool-heat" data-tip="열이 쌓이는 곳을 색으로 보기" type="button" aria-pressed="false">열섬</button>
+      <button class="tool" id="tool-sim" data-tip="시민 제안이 모두 실현되면 얼마나 시원해지는지" type="button" aria-pressed="false">제안 반영 후</button>
+    </div>
+    <button id="tool-report" class="dock-btn tool" data-tip="날씨·공기, 뜨거운 곳 TOP 3, 제안 통계" type="button" aria-pressed="false"><svg class="ico"><use href="#i-report"/></svg><small>리포트</small></button>
+    <button id="tool-gps" class="dock-btn tool" data-tip="지금 내가 있는 곳으로 이동" type="button" hidden><svg class="ico"><use href="#i-locate"/></svg><small>내 위치</small></button>
+    <button id="tool-home" class="dock-btn tool" data-tip="처음 보던 위치로 돌아가기" type="button"><svg class="ico"><use href="#i-home"/></svg><small>처음</small></button>
   </nav>
 
   <!-- 동네 환경 리포트 -->
   <aside id="report" class="report" aria-label="동네 환경 리포트">
-    <div class="report-head"><h2>📊 무실동 환경 리포트</h2><button id="report-close" class="x" type="button" aria-label="닫기">✕</button></div>
+    <div class="report-head"><h2>무실동 환경 리포트</h2><button id="report-close" class="x" type="button" aria-label="닫기"><svg class="ico"><use href="#i-close"/></svg></button></div>
     <a class="admin-link" href="admin/">
       <span>🏛️</span><span><b>지자체 대시보드 보기</b><small>우리 동네 제안이 어떻게 분석되는지 확인해요</small></span><span>→</span>
     </a>
@@ -44,16 +65,21 @@
     <section><h3>🔥 열이 많이 쌓이는 곳 TOP 3</h3><ol id="r-hot" class="r-list"></ol><p class="hint">누르면 그곳으로 이동해요</p></section>
     <section><h3>🌱 시민 제안 효과</h3><div id="r-sim"></div></section>
     <section><h3>📢 유형별 제안·신고 <small>(눌러서 지도에서 숨기기)</small></h3><div id="r-types" class="r-types"></div></section>
+    <section class="r-settings">
+      <button id="tool-labels" class="setting" type="button" aria-pressed="true">
+        <svg class="ico"><use href="#i-tag"/></svg><span>지도에 장소 이름 보기</span><i class="switch" aria-hidden="true"></i>
+      </button>
+    </section>
   </aside>
 
   <!-- 첫 방문 안내 -->
   <div id="intro" class="intro" hidden>
     <div class="intro-card">
-      <h2>🧱 GRID · 우리 동네 열섬 지도</h2>
+      <h2><span class="mark" aria-hidden="true">GRID</span> 우리 동네 열섬 지도</h2>
       <ol>
-        <li><b>🌡️ 열섬</b> 버튼으로 무실동에서 <b>열이 많이 쌓이는 곳</b>을 확인해요.</li>
-        <li>바꾸고 싶은 곳을 <b>눌러서</b> 가로수·그늘막·쿨링포그 같은 <b>개선 블록</b>을 놓아요. 놓기 전에 <b>지수가 얼마나 내려갈지</b> 보여드려요.</li>
-        <li><b>✨ 제안 효과</b>로 시민 제안이 모두 실현되면 동네가 어떻게 바뀌는지 봐요.</li>
+        <li>빨간 곳일수록 <b>여름에 열이 많이 쌓이는 곳</b>이에요.</li>
+        <li>바꾸고 싶은 곳을 <b>눌러서</b> 가로수·그늘막 같은 <b>개선 블록</b>을 놓아요. 놓기 전에 <b>지수가 얼마나 내려갈지</b> 보여드려요.</li>
+        <li>아래 <b>제안 반영 후</b>를 누르면 시민 제안이 모두 실현된 동네를 볼 수 있어요.</li>
       </ol>
       <details class="method">
         <summary>열섬 지수는 어떻게 계산하나요?</summary>
@@ -62,18 +88,17 @@
         <p class="muted-note">실제로 잰 온도가 아니라 <b>추정 지표</b>예요. 다음 단계로 위성 지표온도로 보정할 예정이에요. 기온·미세먼지는 기상청·에어코리아 실시간 값이에요.</p>
       </details>
       <button id="intro-ok" class="primary" type="button">시작하기</button>
-      <a class="intro-admin" href="admin/">🏛️ 지자체 대시보드 보기 →</a>
+      <a class="intro-admin" href="admin/">지자체 대시보드 보기</a>
     </div>
   </div>
-  <div id="envNow" class="env-now" hidden></div>
   <div id="crosshair" class="crosshair" hidden></div>
   <div id="probe" class="probe" hidden></div>
-  <div id="legend" class="legend" hidden>
-    <div class="legend-title">열섬 위험 지수 <small>(주변 50m 기준)</small></div>
-    <div class="legend-bar"></div>
-    <div class="legend-scale"><span>0 시원함</span><span>50</span><span>100 뜨거움</span></div>
-    <p class="legend-note">포장면·건물이 많을수록 ↑, 녹지·물이 많을수록 ↓<br>무실동 평균 <b id="heatAvg">-</b> · 가장 높은 구역 <b id="heatTop">-</b></p>
-  </div>
+  <button id="legend" class="legend" type="button" hidden aria-expanded="false">
+    <span class="legend-row"><span class="legend-title">열섬 위험 지수</span>
+      <span class="legend-scale-wrap"><span class="legend-bar"></span><span class="legend-scale"><span>0 시원함</span><span>50</span><span>100 뜨거움</span></span></span>
+      <span class="legend-more" aria-hidden="true">?</span></span>
+    <span class="legend-note">주변 50m의 포장면·건물이 많을수록 높고, 녹지·물이 많을수록 낮아요.<br>무실동 평균 <b id="heatAvg">-</b>, 가장 높은 곳 <b id="heatTop">-</b></span>
+  </button>
   <div id="offline" class="offline" hidden>서버와 연결이 끊겼어요. 다시 시도하는 중…</div>
 
   <div id="loading" class="loading"><div class="spinner"></div><p>무실동을 블록으로 쌓는 중…</p></div>
@@ -84,13 +109,13 @@
       <div id="sheet-top" class="sheet-top" role="button" tabindex="0" aria-label="제안 창 펼치기·접기">
         <div class="grabber"></div>
         <div class="sheet-head">
-          <h2>이 위치를 어떻게 바꿀까요?</h2>
+          <h2>이곳을 어떻게 바꿀까요?</h2>
           <span id="zone" class="chip"></span>
         </div>
         <div id="heatInfo" class="heat-info"></div>
         <div class="peek-hint">▲ 눌러서 제안하기</div>
       </div>
-      <div class="types-title">🌡️ 열섬 줄이기 제안</div>
+      <div class="types-title">열섬 줄이기 제안</div>
       <div id="types-fix" class="types"></div>
       <div id="shapeBox" class="shape-box" hidden>
         <div class="seg" role="group" aria-label="놓는 방식">
@@ -100,7 +125,7 @@
         </div>
         <div id="shapeHint" class="shape-hint" hidden></div>
       </div>
-      <div class="types-title">📢 환경 불편 신고</div>
+      <div class="types-title">환경 불편 신고</div>
       <div id="types-report" class="types small"></div>
       <div id="effectInfo" class="effect-info"></div>
       <div id="chips" class="chips"></div>
