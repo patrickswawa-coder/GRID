@@ -32,6 +32,8 @@ curl -fsSL https://raw.githubusercontent.com/patrickswawa-coder/GRID/main/deploy
 ```bash
 ~/GRID/deploy.sh
 ```
+처음 실행할 때 nginx 에 `/etc/nginx/conf.d/grid-cache.conf` (브라우저가 매번 새 파일인지 확인)를 한 번 넣어요.
+배포 후에도 예전 화면(아이콘이 크게 보이는 등)이 보이던 문제를 막아요. 빼려면 그 파일을 지우고 `sudo systemctl reload nginx`.
 
 ## 자주 쓰는 명령 (서버 안에서)
 ```bash
