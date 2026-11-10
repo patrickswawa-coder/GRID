@@ -185,6 +185,7 @@ async function start() {
   scene.fog = new THREE.Fog(0xd6ebf5, Math.max(W, D) * 0.9, Math.max(W, D) * 2.2);
   placeSun(W, D);
   buildTypeButtons();
+  if (showOthers) setShowOthers(true, true);
   await poll();
   setInterval(poll, POLL_MS);
   $("#loading").remove();
@@ -440,7 +441,27 @@ function clientId() {
 }
 const STATUS_LABEL = { received: "접수", working: "처리중", done: "처리 완료" };
 function myIds() { try { return JSON.parse(localStorage.getItem("grid-mine") || "[]"); } catch { return []; } }
-function rememberMine(id) { try { localStorage.setItem("grid-mine", JSON.stringify([...myIds(), id].slice(-200))); } catch {} }
+function rememberMine(id) { mine.add(id); try { localStorage.setItem("grid-mine", JSON.stringify([...myIds(), id].slice(-200))); } catch {} }
+
+// 다른 시민 제안은 기본으로 숨긴다 — 들어올 때마다 깨끗한 지도에서 시작 (서버에는 모두 저장되고 대시보드에는 다 보인다).
+// 위 막대의 제안 수 버튼이나 리포트의 스위치로 켠다. 내가 이 기기에서 올린 제안은 늘 보인다. ?all 이면 켠 채로 시작(발표용)
+const mine = new Set(myIds());
+let showOthers = QS.has("all");
+const markerVisible = (c) => !hiddenTypes.has(c.type) && (showOthers || mine.has(c.id));
+function applyMarkerVisibility() {
+  for (const { obj, data } of markers.values()) obj.visible = markerVisible(data);
+  if (detailId != null && markers.has(detailId) && !markers.get(detailId).obj.visible) closeDetail();
+}
+function setShowOthers(on, quiet = false) {
+  showOthers = on;
+  applyMarkerVisibility();
+  for (const id of ["#count-btn", "#tool-others"]) $(id).setAttribute("aria-pressed", String(on));
+  if (!on && simOn) setSim(false, true); // '제안 반영 후'는 모든 제안 기준이라 같이 끈다
+  if (quiet) return;
+  const others = [...markers.values()].filter((m) => !mine.has(m.data.id)).length;
+  toast(on ? (others ? `다른 시민 제안 ${others}건을 지도에 표시했어요. 눌러서 공감할 수 있어요` : "아직 다른 시민 제안이 없어요")
+           : "다른 시민 제안을 숨겼어요. 내 제안만 보여요", 3500);
+}
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, { headers: { "Content-Type": "application/json", "X-Client-Id": clientId() }, ...opts });
@@ -511,7 +532,7 @@ function addMarker(c, animate) {
   if (multi) obj.position.set(0, 0, 0);
   else obj.position.set(c.x + 0.5, baseY, c.z + 0.5);
   obj.userData = { ...obj.userData, id: c.id, baseY, drop: animate ? 25 : 0 };
-  obj.visible = !hiddenTypes.has(c.type);
+  obj.visible = markerVisible(c);
   markerRoot.add(obj);
   markers.set(c.id, { obj, data: c });
   lastId = Math.max(lastId, c.id);
@@ -1005,8 +1026,8 @@ $("#form").addEventListener("submit", async (e) => {
         type: chosenType, text: $("#text").value.trim(), ...extra,
       }),
     });
+    rememberMine(c.id); // 먼저 내 것으로 기억해야 바로 보인다
     addMarker(c, true);
-    rememberMine(c.id);
     $("#count").textContent = markers.size;
     $("#text").value = "";
     closeSheet();
@@ -1114,6 +1135,7 @@ function proposals() {
 function setSim(on, quiet = false) {
   simOn = on;
   if (on) {
+    if (!showOthers) setShowOthers(true, true); // 모든 시민 제안 기준이므로 제안도 같이 보여준다
     heatSim = computeHeat(map, buildMods(map, expandAll(proposals()), TYPE_BY_CODE));
     if (!heatOn) setHeat(true, true);
     paintHeat(world, map, heatSim, true);
@@ -1135,6 +1157,8 @@ function onProposalsChanged() {
 }
 
 // ---------------------------------------------------------------- 나머지 도구
+$("#count-btn").onclick = () => setShowOthers(!showOthers);
+$("#tool-others").onclick = () => setShowOthers(!showOthers);
 $("#tool-labels").onclick = () => {
   if (!labels) return;
   labels.group.visible = !labels.group.visible;
@@ -1245,7 +1269,7 @@ function renderReport() {
     b.onclick = () => {
       const c = b.dataset.code;
       hiddenTypes.has(c) ? hiddenTypes.delete(c) : hiddenTypes.add(c);
-      for (const { obj, data } of markers.values()) obj.visible = !hiddenTypes.has(data.type);
+      applyMarkerVisibility();
       renderReport();
     };
   });
