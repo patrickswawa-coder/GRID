@@ -257,3 +257,48 @@ def test_same_wifi_different_people_not_blocked(monkeypatch):
     assert client.post("/api/complaints", json=body, headers=a).status_code == 429
     monkeypatch.setattr(main, "POST_INTERVAL", 0)
     assert client.post("/api/complaints", json=body, headers=a).status_code == 409
+
+
+def test_moderation_rules(monkeypatch):
+    monkeypatch.setattr(main, "ADMIN_PASSWORD", "pw")
+    base = {**SAMPLE, "type": "shade"}
+    # 욕설은 거절
+    assert client.post("/api/complaints", json={**base, "x": 301, "text": "씨1발 왜 이래"}).status_code == 400
+    # 멀쩡한 글은 공개
+    ok = client.post("/api/complaints", json={**base, "x": 302, "text": "가로등이 꺼져 있어요"}, headers={"X-Client-Id": "A"}).json()
+    assert ok["moderation"] is None and "client" not in ok
+    # 의미 없는 글은 받되 확인 필요 → 남에게는 안 보이고 올린 본인에게는 보임
+    junk = client.post("/api/complaints", json={**base, "x": 303, "text": "ㅋㅋㅋㅋㅋㅋ"}, headers={"X-Client-Id": "B"}).json()
+    assert junk["moderation"] == "review" and junk["mod_reason"]
+    ids = lambda who: {c["id"] for c in client.get("/api/complaints", headers={"X-Client-Id": who}).json()}
+    sync = lambda who: {c["id"] for c in client.get("/api/complaints/sync", headers={"X-Client-Id": who}).json()}
+    assert junk["id"] not in ids("A") and junk["id"] not in sync("A")
+    assert junk["id"] in ids("B") and junk["id"] in sync("B")
+    # 관리자 목록(all=1 + 토큰)에는 전부, 토큰 없으면 공개만
+    assert junk["id"] in {c["id"] for c in client.get("/api/complaints?all=1", headers={"X-Admin-Token": "pw"}).json()}
+    assert junk["id"] not in {c["id"] for c in client.get("/api/complaints?all=1").json()}
+    assert client.get("/api/stats").json()["hidden"] >= 1
+    # 관리자: 멀쩡한 글 숨기기 → 남에게서 사라짐, 다시 보이기 → 돌아옴
+    h = {"X-Admin-Token": "pw"}
+    assert client.patch(f"/api/complaints/{ok['id']}", json={"moderation": "hidden"}, headers=h).json()["mod_reason"] == "관리자 숨김"
+    assert ok["id"] not in ids("B")
+    assert client.patch(f"/api/complaints/{junk['id']}", json={"moderation": "ok"}, headers=h).json()["moderation"] == "ok"
+    assert junk["id"] in ids("A")
+    assert client.patch(f"/api/complaints/{ok['id']}", json={"moderation": "bogus"}, headers=h).status_code == 422
+    assert client.patch(f"/api/complaints/{ok['id']}", json={"moderation": "hidden"}).status_code == 401
+
+
+def test_moderation_ai(monkeypatch):
+    calls = []
+    monkeypatch.setattr(main, "ask_model", lambda p, n=0: calls.append(p) or '{"urgency":1,"tag":"장난","ok":false,"reason":"놀이기구 요청"}')
+    c = client.post("/api/complaints", json={**SAMPLE, "x": 310, "text": "우리집 앞에 롤러코스터 지어주세요"}).json()
+    main.ai_classify(c["id"], "tree", c["text"], True)
+    row = next(x for x in client.get("/api/complaints?all=1").json() if x["id"] == c["id"])
+    assert row["moderation"] == "review" and "놀이기구" in row["mod_reason"]
+    # 관리자가 다시 보이게 한 글은 AI 가 다시 숨기지 않음, judge=False 면 판단 안 함
+    client.patch(f"/api/complaints/{c['id']}", json={"moderation": "ok"})
+    main.ai_classify(c["id"], "tree", c["text"], True)
+    d = client.post("/api/complaints", json={**SAMPLE, "x": 311, "text": ""}).json()
+    main.ai_classify(d["id"], "tree", d["text"], False)
+    rows = {x["id"]: x for x in client.get("/api/complaints?all=1").json()}
+    assert rows[c["id"]]["moderation"] == "ok" and rows[d["id"]]["moderation"] is None

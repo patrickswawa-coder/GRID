@@ -3,6 +3,7 @@
 실행(로컬):  cd backend && uvicorn main:app --reload --port 8000
 규칙: docs/CONVENTIONS.md 의 '5. 민원 데이터', '6. API' 를 따른다.
 """
+import hashlib
 import hmac
 import io
 import json
@@ -124,6 +125,11 @@ def init_db():
         for col, typ in (("x2", "INTEGER"), ("z2", "INTEGER"), ("shape", "TEXT"), ("points", "TEXT")):
             if col not in cols:
                 conn.execute(f"ALTER TABLE complaints ADD COLUMN {col} {typ}")
+        # 장난·부적절 민원 거르기: moderation NULL=정상, 'review'=확인 필요(자동), 'hidden'=숨김(관리자), 'ok'=관리자가 확인함
+        # client = 올린 기기(X-Client-Id)의 해시 — 숨겨진 글도 올린 본인 화면에는 보이게
+        for col in ("moderation", "mod_reason", "client"):
+            if col not in cols:
+                conn.execute(f"ALTER TABLE complaints ADD COLUMN {col} TEXT")
 
 
 init_db()
@@ -137,6 +143,7 @@ import heatmodel  # noqa: E402  구역별 열섬 × 시민 제안 우선순위 (
 
 app.include_router(heatmodel.router)
 
+import moderation  # noqa: E402  장난·부적절 민원 거르기 (규칙)
 import geo  # noqa: E402  경위도 ↔ 지도 칸 (정확한 TM 변환, 예전 근사식은 15~38m 오차)
 
 
@@ -159,12 +166,28 @@ fix_saved_latlng()
 
 def row_to_dict(row: sqlite3.Row) -> dict:
     d = dict(row)
+    d.pop("client", None)  # 기기 해시는 내보내지 않음
     if d.get("points"):  # 자유 그리기 경로는 JSON 문자열로 저장 → 목록으로
         try:
             d["points"] = json.loads(d["points"])
         except ValueError:
             d["points"] = None
     return d
+
+
+# 시민 지도·통계·AI 요약·우선순위에 쓰는 민원 = 거름 장치에 걸리지 않았거나 관리자가 확인한 것
+PUBLIC = "(moderation IS NULL OR moderation = 'ok')"
+
+
+def client_hash(x_client_id: str | None) -> str | None:
+    cid = (x_client_id or "").strip()[:64]
+    return hashlib.sha256(cid.encode()).hexdigest()[:16] if cid else None
+
+
+def is_admin(token: str | None) -> bool:
+    if not ADMIN_PASSWORD:
+        return True
+    return bool(token) and hmac.compare_digest(token.encode(), ADMIN_PASSWORD.encode())
 
 
 def now_kst() -> str:
@@ -197,6 +220,7 @@ class Login(BaseModel):
 class Update(BaseModel):
     status: str | None = None
     reply: str | None = Field(default=None, max_length=300)
+    moderation: Optional[Literal["hidden", "ok"]] = None  # 숨기기 / 다시 보이기(확인함)
 
 
 def require_admin(x_admin_token: str | None = Header(default=None)):
@@ -261,12 +285,16 @@ def config():
 
 
 @app.get("/api/complaints")
-def list_complaints(since_id: int = 0, limit: int = 500):
+def list_complaints(since_id: int = 0, limit: int = 500, all: int = 0,
+                    x_client_id: str | None = Header(default=None), x_admin_token: str | None = Header(default=None)):
+    """시민: 공개 민원 + 내가 올린 것. 관리자(all=1 + 토큰): 숨김·확인 필요까지 전부."""
     limit = max(1, min(limit, 2000))
+    if all and is_admin(x_admin_token):
+        where, args = "id > ?", (since_id,)
+    else:
+        where, args = f"id > ? AND ({PUBLIC} OR client = ?)", (since_id, client_hash(x_client_id) or "-")
     with db() as conn:
-        rows = conn.execute(
-            "SELECT * FROM complaints WHERE id > ? ORDER BY id LIMIT ?", (since_id, limit)
-        ).fetchall()
+        rows = conn.execute(f"SELECT * FROM complaints WHERE {where} ORDER BY id LIMIT ?", (*args, limit)).fetchall()
     return [row_to_dict(r) for r in rows]
 
 
@@ -275,6 +303,11 @@ def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks,
                      x_client_id: str | None = Header(default=None)):
     if body.type not in TYPES:
         raise HTTPException(400, f"알 수 없는 유형입니다: {body.type}")
+    # 장난·부적절 거르기 1단계(규칙): 욕설은 거절, 의미 없는 글은 받되 '확인 필요'로 숨김
+    verdict, reason = moderation.check(body.text)
+    if verdict == "reject":
+        raise HTTPException(400, "부적절한 표현이 있어요. 고쳐서 다시 올려 주세요.")
+    mod = "review" if verdict == "review" else None
     # 글 없이 유형만 골라도 등록된다. 목록·AI 요약에서 빈 칸이 되지 않게 유형 이름으로 채움
     text = body.text.strip() or f"{TYPES[body.type]} 요청"
     x2, z2, shape, points = body.x2, body.z2, body.shape, None
@@ -302,14 +335,16 @@ def create_complaint(body: ComplaintIn, request: Request, bg: BackgroundTasks,
     check_duplicate(who, body.x, body.z, body.type)
     with _db_lock, db() as conn:
         cur = conn.execute(
-            "INSERT INTO complaints (x, z, lat, lng, zone, type, text, created_at, x2, z2, shape, points)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (body.x, body.z, *map_latlng(body.x, body.z), body.zone.upper(), body.type, text, now_kst(), x2, z2, shape, points),
+            "INSERT INTO complaints (x, z, lat, lng, zone, type, text, created_at, x2, z2, shape, points,"
+            " moderation, mod_reason, client) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (body.x, body.z, *map_latlng(body.x, body.z), body.zone.upper(), body.type, text, now_kst(), x2, z2, shape, points,
+             mod, reason if mod else None, client_hash(x_client_id)),
         )
         new_id = cur.lastrowid
         row = conn.execute("SELECT * FROM complaints WHERE id = ?", (new_id,)).fetchone()
     if AI_ENABLED:
-        bg.add_task(ai_classify, new_id, body.type, text)
+        # 2단계(AI): 시민이 직접 쓴 글이 있고 규칙에 안 걸렸을 때만 "진지한 요청인지"도 같이 판단
+        bg.add_task(ai_classify, new_id, body.type, text, bool(body.text.strip()) and mod is None)
     return row_to_dict(row)
 
 
@@ -333,10 +368,12 @@ def like_complaint(cid: int, request: Request, x_client_id: str | None = Header(
 
 
 @app.get("/api/complaints/sync")
-def sync_complaints():
-    """시민 페이지가 8초마다 부르는 가벼운 목록: 상태·공감 변경과 삭제를 반영하기 위함."""
+def sync_complaints(x_client_id: str | None = Header(default=None)):
+    """시민 페이지가 8초마다 부르는 가벼운 목록: 상태·공감 변경과 삭제를 반영하기 위함.
+    숨겨진 민원은 여기서 빠지므로 다른 사람 지도에서는 지워진다 (올린 본인에게는 남음)."""
     with db() as conn:
-        rows = conn.execute("SELECT id, status, likes, reply FROM complaints ORDER BY id").fetchall()
+        rows = conn.execute(f"SELECT id, status, likes, reply FROM complaints WHERE {PUBLIC} OR client = ? ORDER BY id",
+                            (client_hash(x_client_id) or "-",)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -366,6 +403,10 @@ def update_complaint(cid: int, body: Update, _=Depends(require_admin)):
     if body.reply is not None:
         sets.append("reply = ?")
         args.append(body.reply.strip() or None)
+    if body.moderation is not None:
+        # 숨기기: 이유가 없으면 '관리자 숨김' / 다시 보이기(ok): 이후 AI 가 다시 숨기지 않음
+        sets += ["moderation = ?", "mod_reason = CASE WHEN ? = 'hidden' THEN COALESCE(mod_reason, '관리자 숨김') ELSE mod_reason END"]
+        args += [body.moderation, body.moderation]
     if not sets:
         raise HTTPException(400, "바꿀 내용이 없습니다.")
     with _db_lock, db() as conn:
@@ -418,22 +459,23 @@ def qr_svg(url: str):
 def stats():
     today = datetime.now(KST).date().isoformat()
     with db() as conn:
-        total = conn.execute("SELECT COUNT(*) FROM complaints").fetchone()[0]
+        total = conn.execute(f"SELECT COUNT(*) FROM complaints WHERE {PUBLIC}").fetchone()[0]
         today_n = conn.execute(
-            "SELECT COUNT(*) FROM complaints WHERE substr(created_at, 1, 10) = ?", (today,)
+            f"SELECT COUNT(*) FROM complaints WHERE {PUBLIC} AND substr(created_at, 1, 10) = ?", (today,)
         ).fetchone()[0]
-        by_type = dict(conn.execute("SELECT type, COUNT(*) FROM complaints GROUP BY type").fetchall())
+        by_type = dict(conn.execute(f"SELECT type, COUNT(*) FROM complaints WHERE {PUBLIC} GROUP BY type").fetchall())
         by_zone = dict(
-            conn.execute("SELECT zone, COUNT(*) FROM complaints GROUP BY zone ORDER BY 2 DESC").fetchall()
+            conn.execute(f"SELECT zone, COUNT(*) FROM complaints WHERE {PUBLIC} GROUP BY zone ORDER BY 2 DESC").fetchall()
         )
+        review = conn.execute(f"SELECT COUNT(*) FROM complaints WHERE NOT {PUBLIC}").fetchone()[0]
         top = []
         for zone, cnt in list(by_zone.items())[:5]:
             t = conn.execute(
-                "SELECT type, COUNT(*) c FROM complaints WHERE zone = ? GROUP BY type ORDER BY c DESC LIMIT 1",
+                f"SELECT type, COUNT(*) c FROM complaints WHERE {PUBLIC} AND zone = ? GROUP BY type ORDER BY c DESC LIMIT 1",
                 (zone,),
             ).fetchone()
             top.append({"zone": zone, "count": cnt, "top_type": t[0] if t else None})
-    return {"total": total, "today": today_n, "by_type": by_type, "by_zone": by_zone, "top_zones": top}
+    return {"total": total, "today": today_n, "by_type": by_type, "by_zone": by_zone, "top_zones": top, "hidden": review}
 
 
 # ---------------------------------------------------------------- AI (Bedrock)
@@ -459,23 +501,32 @@ def ask_model(prompt: str, max_tokens: int = 512) -> str:
     return "\n".join(b["text"] for b in res["output"]["message"]["content"] if "text" in b)
 
 
-def ai_classify(cid: int, ctype: str, text: str):
-    """등록된 민원에 긴급도(1~3)와 한 단어 태그를 붙인다. 실패해도 조용히 넘어간다."""
+def ai_classify(cid: int, ctype: str, text: str, judge: bool = False):
+    """등록된 민원에 긴급도(1~3)와 한 단어 태그를 붙인다. judge 면 장난·무관한 글인지도 판단해
+    '확인 필요'로 숨긴다(관리자가 다시 보이게 할 수 있음). 실패해도 조용히 넘어간다."""
     prompt = (
         "너는 원주시 환경 민원 분류 담당이야. 아래 시민의 환경 개선 제안·불편 신고를 보고 JSON 한 줄로만 답해.\n"
-        '형식: {"urgency": 1|2|3, "tag": "두~네 글자 한국어 태그"}\n'
+        '형식: {"urgency": 1|2|3, "tag": "두~네 글자 한국어 태그", "ok": true|false, "reason": "ok 가 false 일 때만 20자 이내 이유"}\n'
         "urgency 3=건강·안전 위험(폭염 취약, 심한 악취·매연 등), 2=생활 불편, 1=개선 희망.\n"
+        "ok: 동네 환경·더위·그늘·녹지·공기·소음·쓰레기·안전·시설에 관한 요청이면 짧거나 맞춤법이 틀려도, "
+        "불만 섞인 말투여도 true. 명백한 장난(예: 롤러코스터·수영장·놀이공원 지어줘), 광고, 특정인 비방, "
+        "동네와 무관한 글, 무의미한 글일 때만 false. 애매하면 true.\n"
         f"유형: {TYPE_NAMES.get(ctype, ctype)}\n민원: {text}"
     )
     try:
-        raw = ask_model(prompt, 100)
+        raw = ask_model(prompt, 150)
         data = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
         urgency = int(data.get("urgency"))
         tag = str(data.get("tag", ""))[:10] or None
         if urgency not in (1, 2, 3):
             return
+        flag = judge and data.get("ok") is False
+        reason = ("AI: " + str(data.get("reason") or "장난·무관 의심"))[:40]
         with _db_lock, db() as conn:
             conn.execute("UPDATE complaints SET ai_urgency = ?, ai_tag = ? WHERE id = ?", (urgency, tag, cid))
+            if flag:  # 관리자가 이미 판단한 글(hidden/ok)은 건드리지 않음
+                conn.execute("UPDATE complaints SET moderation = 'review', mod_reason = ? WHERE id = ? AND moderation IS NULL",
+                             (reason, cid))
     except Exception as e:  # AI는 부가 기능: 실패해도 서비스는 계속
         print(f"[ai_classify] skip #{cid}: {e}")
 
@@ -488,7 +539,7 @@ def ai_summary():
     if _summary_cache["data"] and time.time() - _summary_cache["at"] < 300:
         return _summary_cache["data"]
     with db() as conn:
-        rows = conn.execute("SELECT zone, type, text, likes FROM complaints ORDER BY id DESC LIMIT 80").fetchall()
+        rows = conn.execute(f"SELECT zone, type, text, likes FROM complaints WHERE {PUBLIC} ORDER BY id DESC LIMIT 80").fetchall()
     if not rows:
         return {"summary": "아직 접수된 민원이 없습니다.", "generated_at": now_kst(), "ai": False}
     lines = [f"- [{r['zone']}] {TYPE_NAMES.get(r['type'], r['type'])}: {r['text']} (공감 {r['likes']})" for r in rows]
