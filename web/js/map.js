@@ -196,6 +196,10 @@ export function buildScene(map) {
   }
   const groundTex = new THREE.DataTexture(tex, W, D);
   groundTex.magFilter = THREE.NearestFilter;
+  // 멀리서 볼 때(축소) 칸마다 다른 색이 픽셀보다 작아져 지글거리지 않게, 축소할 때는 평균색으로
+  groundTex.generateMipmaps = true;
+  groundTex.minFilter = THREE.LinearMipmapLinearFilter;
+  groundTex.anisotropy = 4;
   groundTex.colorSpace = THREE.SRGBColorSpace;
   groundTex.needsUpdate = true;
 
@@ -261,10 +265,11 @@ export function buildScene(map) {
   mesh.name = "buildings";
   group.add(mesh);
 
-  group.add(buildTrees(map));
+  const trees = buildTrees(map);
+  group.add(trees);
 
   // 열섬 레이어(heat.js)가 색을 바꿨다 되돌릴 수 있게 원본을 같이 넘긴다
-  return { group, ground, buildings: mesh, groundTex, groundBase: tex.slice(), roofBase: aRoof.slice() };
+  return { group, ground, buildings: mesh, trees, groundTex, groundBase: tex.slice(), roofBase: aRoof.slice() };
 }
 
 // 공원·임야에는 숲, 도로변 인도에는 가로수

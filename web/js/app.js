@@ -341,10 +341,19 @@ function fitNear() {
   }
 }
 
+// 멀리서는 나무 한 그루가 화면 2픽셀보다 작아져, 움직일 때마다 점들이 지글거린다 → 그때는 나무를 그리지 않는다.
+// (바닥이 이미 초록이라 숲은 그대로 숲으로 보인다. 경계에서 깜빡이지 않게 켜는 거리와 끄는 거리를 다르게)
+function fitDetail() {
+  if (!world?.trees) return;
+  const px = innerHeight / (2 * Math.tan((camera.fov * Math.PI) / 360)) / camera.position.distanceTo(controls.target);
+  if (world.trees.visible ? px < 2 : px > 2.4) world.trees.visible = !world.trees.visible;
+}
+
 function loop() {
   requestAnimationFrame(loop);
   controls.update();
   fitNear();
+  fitDetail();
   if (map) {
     // 지도 밖으로 너무 나가지 않게
     const t = controls.target;
