@@ -106,6 +106,32 @@
       </div>
     </section>
 
+    <!-- 근거 -->
+    <section>
+      <div class="sec-head">
+        <h2>열섬 지수의 근거</h2>
+        <p class="cap">열섬 지수는 건물·도로·녹지 지도로 계산하고, 가중치를 Landsat 위성의 여름 한낮 표면온도에 맞춰 보정했어요.</p>
+      </div>
+      <div class="evid">
+        <div class="panel">
+          <div class="panel-head"><h3>위성 표면온도와 비교</h3><span id="lst-src" class="tag"></span></div>
+          <p class="cap">점 하나가 100m 구역이에요. 지수가 높은 구역일수록 위성으로 잰 표면도 뜨거워요.</p>
+          <div id="lst-scatter" class="chart" role="img" aria-label="구역별 열섬 지수와 위성 표면온도 산점도"></div>
+        </div>
+        <div class="panel">
+          <div class="evid-stats">
+            <div><b id="lst-r">-</b><span>상관계수 (100m 구역)</span></div>
+            <div><b id="lst-k">-</b><span>지수 10점 차이</span></div>
+            <div><b id="lst-n">-</b><span id="lst-dates">여름 위성 장면</span></div>
+          </div>
+          <div class="panel-head"><h3>바닥 종류별 여름 한낮 표면온도</h3></div>
+          <p class="cap">무실동 평균과의 차이예요. 지붕이 도로보다 뜨겁고, 고층 단지는 그늘 덕분에 덜 뜨거워요.</p>
+          <div id="lst-types" class="chart short" role="img" aria-label="바닥 종류별 위성 표면온도"></div>
+          <p class="cap">위성은 오전 10시 반쯤 땅 표면 온도를 재요. 기온과는 다르고, 열 센서 해상도는 약 100m예요.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- 목록 -->
     <section>
       <div class="sec-head">

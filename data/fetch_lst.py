@@ -26,7 +26,13 @@ except ImportError:
     sys.exit("먼저 설치해 주세요:  pip install pystac-client planetary-computer rasterio")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from build_voxels import DEFAULT_BBOX  # (서, 남, 동, 북) — 지도와 같은 범위
+try:
+    from build_voxels import DEFAULT_BBOX  # (서, 남, 동, 북) — 지도와 같은 범위
+except ImportError:  # 서버처럼 geopandas 가 없으면 지도 파일(voxels.json)의 범위로 계산
+    import json
+    _m = json.loads((Path(__file__).resolve().parents[1] / "web" / "data" / "voxels.json").read_text(encoding="utf-8"))["meta"]
+    _x0, _y1, _c = _m["tm"]["x0"], _m["tm"]["y1"], _m["cell"]
+    DEFAULT_BBOX = transform_bounds(_m["tm"]["crs"], "EPSG:4326", _x0, _y1 - _m["depth"] * _c, _x0 + _m["width"] * _c, _y1)
 
 OUT = Path(__file__).resolve().parent / "raw" / "muksil_lst.tif"
 CACHE = OUT.parent / "lst_cache"  # 받은 원본 (다시 실행할 때 재사용, 지워도 됨)
