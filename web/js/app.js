@@ -1128,6 +1128,16 @@ function homeView() {
   controls.target.set(home.x, 0, home.z);
   camera.position.set(home.x + M * 0.35, M * 0.45, home.z + M * 0.55);
 }
+// 폰(터치): 도구 버튼을 누르면 설명을 1.5초 보여줌
+for (const b of document.querySelectorAll(".tool[data-tip]")) {
+  let t = 0;
+  b.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "touch") return;
+    document.querySelectorAll(".tool.tip-show").forEach((o) => o.classList.remove("tip-show"));
+    b.classList.add("tip-show");
+    clearTimeout(t); t = setTimeout(() => b.classList.remove("tip-show"), 1500);
+  });
+}
 $("#tool-help").onclick = () => { $("#intro").hidden = false; };
 $("#intro-ok").onclick = () => {
   $("#intro").hidden = true;
