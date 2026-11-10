@@ -16,7 +16,7 @@
               backend/ (FastAPI + SQLite: grid.db)
                     │  GET /api/complaints, /api/stats, /api/ai/summary
                     ▼
-              dashboard/ (Streamlit, 공무원용)
+              web/admin/ (지자체 대시보드, 공무원용)
 
 data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어 둠)
 ```
@@ -28,7 +28,7 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 | `data/` | SHP → 복셀 변환, 임시 맵 생성, 더미 민원, QR 생성 | 데이터 |
 | `web/` | 시민용 3D 페이지 (빌드 없음, 순수 HTML/JS 모듈) | 3D 맵 ×2 |
 | `backend/` | FastAPI 서버, SQLite, Bedrock AI | 백엔드 |
-| `dashboard/` | Streamlit 대시보드 | 대시보드 |
+| `web/admin/` | 지자체 대시보드 (HTML/JS + ECharts) | 대시보드 |
 | `deploy/` | 서버 설정 예시 (nginx, systemd) | 백엔드 |
 | `docs/` | 이 문서, 파트별 작업 문서 | 모두 |
 
@@ -111,7 +111,7 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 
 예전 유형 `streetlight`, `bench`, `walkway` 는 이미 저장된 데이터 표시용으로만 남김 (새 등록 불가).
 
-유형을 추가하려면 `backend/main.py`의 `TYPES`, `web/js/types.js`, `dashboard/app.py`의 `TYPE_LABELS` 세 곳을 같이 고칩니다.
+유형을 추가하려면 `backend/main.py`의 `TYPES`, `web/js/types.js` 두 곳을 같이 고칩니다. (대시보드는 `types.js`를 그대로 씀)
 
 ## 6. API
 

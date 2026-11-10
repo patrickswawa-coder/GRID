@@ -1,18 +1,19 @@
 # 파트 5 — 대시보드 + 시연 데이터
 
-담당: `dashboard/`, `data/seed_complaints.py`
+담당: `web/admin/`, `data/seed_complaints.py`
 
-현재: 지표 5개(전체·오늘·최다 유형·최다 구역·AI 긴급), 위치 히트맵(pydeck), 유형별 막대, 구역 TOP 5,
-AI 요약, 공감순 목록, CSV 다운로드, 유형 필터, 10초 자동 새로고침.
+예전 Streamlit 대시보드(`dashboard/`)는 11/10에 `web/admin/`(HTML/JS)으로 완전히 옮기고 지웠습니다.
+주소: 로컬 http://localhost:8000/admin/ · 서버 https://grid-team7.duckdns.org/admin/
 
-## 할 일 (우선순위 순)
-- [ ] **11/9** 로컬에서 더미 데이터로 돌려보고 "공무원이 보고 바로 결정할 수 있나?" 기준으로 배치 다듬기
-- [ ] **11/10** "우선 검토 추천" 섹션: 구역별 (건수 × 공감 × 긴급도) 점수로 TOP 3 카드 — 기획서의 '예산 집행 근거'
-- [ ] **11/10** 구역 코드(A1, C3…)를 실제 장소 이름으로 바꿀 매핑 (파트 1과 같이, 예: C3 → "시청 앞 사거리")
-- [ ] **11/11** 시연용 더미 데이터 스토리 만들기: 특정 구역에 가로등 민원이 몰리도록 `seed_complaints.py` 수정
-- [ ] **11/11** 발표용 대시보드 캡처
+## 지금 화면 (11/10)
+- 한눈에 보기 6칸: 평균 열섬 지수, 지수 70 이상 면적, 제안·신고, 처리 완료율, 기온, 초미세먼지
+- 먼저 손댈 곳: 5m 열섬 지도(시민 화면과 같은 계산) + 우선 개선 구역 5곳 + 정책 제안(AI/규칙)
+- 분석: 열섬 × 시민 요구 산점도, 유형별 막대(ECharts), 처리 현황, 구역별 건수
+- 근거: 위성 지표온도와 열섬 지수 비교 (`web/data/lst_compare.json`, `data/export_lst.py`)
+- 제안·신고 목록: 상태·유형 필터, 관리자 로그인 시 처리 상태·답변·삭제, CSV
 
-## 참고
-- 데이터는 API로만 가져옴 (`GRID_API` 환경변수, 기본 `http://127.0.0.1:8000`)
-- 서버에서는 `--server.baseUrlPath dashboard` 로 띄워 `https://서버/dashboard` 에서 보이게 (deploy 참고)
-- 지도 배경(Carto)은 인터넷이 필요함
+## 시연 데이터
+```
+# 서버에서 (기존 민원을 모두 지우고 새로 채움, 관리자 비밀번호는 .env 에서 읽음)
+cd ~/GRID && .venv/bin/python data/seed_complaints.py --env-file .env --reset --n 80 --focus 5 --seed 7 --delay 1.1 --handled 0.35 --api http://127.0.0.1:8000
+```

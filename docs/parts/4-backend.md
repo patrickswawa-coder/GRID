@@ -10,7 +10,7 @@
 - [ ] **11/9** `MODEL_ID` 확인: 서버에서 `curl -X POST localhost:8000/api/ai/explain -H 'Content-Type: application/json' -d '{"text":"안녕"}'`
   - 안 되면 Bedrock 콘솔에서 쓸 수 있는 모델 ID로 `.env` 또는 systemd `Environment=MODEL_ID=...` 수정
 - [ ] **11/10** AI 분류 프롬프트 다듬기 (`ai_classify`) — 실제 민원 10개 넣어보고 결과 확인
-- [ ] **11/10** Streamlit도 서버에 올리기 (`deploy/grid-dashboard.service`, nginx `/dashboard`)
+- [x] ~~Streamlit도 서버에 올리기~~ → 대시보드는 `web/admin/` 으로 옮겨 필요 없음 (11/10, `dashboard/` 삭제)
 - [ ] **11/11** 시연 전 DB 초기화/백업 방법 정리 (`grid.db` 복사), 더미 데이터 다시 넣기
 - [ ] (여유) 대시보드용 `/api/stats`에 우선순위 점수 추가 (건수 + 공감 + 긴급도)
 
