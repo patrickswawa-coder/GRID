@@ -19,8 +19,8 @@ WEB = Path(__file__).resolve().parents[1] / "web" / "data"
 
 GRASS, ROAD, SIDEWALK, PARK, WATER = 0, 1, 2, 3, 4
 RADIUS = 10
-W8 = (0.45, 0.2, 0.15, -0.45, -0.3)
-ANCHORS = [(-0.45, 0), (0.15, 40), (0.42, 70), (0.56, 100)]
+W8 = (4.0, 17.4, -21.8, -4.6, -3.0)  # 위성 지표온도 보정 (°C) — web/js/heat.js 와 같게
+ANCHORS = [(-4.6, 0), (8.4, 100)]
 # web/js/types.js 의 effect 와 같게
 EFFECTS = {
     "tree": dict(size=5, green=0.6),
@@ -177,7 +177,7 @@ def compute(proposals):
                     arr[sl] = np.minimum(1, arr[sl] + e[k])
         # heat.js features() 와 같은 순서·식
         rc = np.where(bld, mr, 0)
-        cov = cov * (1 - rc * 0.5); hgt = hgt * (1 - rc * 0.5); imp = imp * (1 - rc * 0.8)
+        cov = cov * (1 - rc * 0.5); imp = imp * (1 - rc * 0.8)  # 옥상녹화는 높이를 바꾸지 않음
         grn = np.where(bld & (rc > 0), np.maximum(grn, rc * 0.7), grn)
         imp = np.where(~bld, imp * (1 - mi), imp)
         eg = np.where(~bld, mg, 0)
@@ -224,7 +224,7 @@ def priority(complaints):
             green = (~hb & (g == PARK)).mean() + 0.6 * (~hb & (g == GRASS)).mean()
             lat, lng = geo.cell_to_latlng(m, zx + s / 2 - 0.5, zz + s / 2 - 0.5)  # 구역 가운데 (정확한 TM 변환)
             zones[key] = dict(zone=key, heat=float(b.mean()), heat_p90=float(np.percentile(b, 90)),
-                              heat_after=float(a.mean()), built=float(urban), paved=float(paved), green=float(green),
+                              heat_after=float(a.mean()), built=float(urban), area=int(b.size), paved=float(paved), green=float(green),
                               lat=lat, lng=lng, proposals=0, reports=0, likes=0, types={})
     for c in complaints:
         if not (0 <= c["x"] < W and 0 <= c["z"] < D):
@@ -244,6 +244,8 @@ def priority(complaints):
     for k, z in zones.items():
         if z["built"] < 0.02 and demand[k] == 0:
             continue  # 숲·밭만 있는 구역은 제외
+        if z["area"] < s * s / 4 and demand[k] == 0:
+            continue  # 지도 가장자리의 얇은 조각 구역 (heat.js zoneHeat 와 같은 기준)
         z["score"] = round(0.6 * z["heat"] + 0.4 * 100 * math.sqrt(demand[k] / dmax), 1)
         z["top_type"] = max(z["types"], key=z["types"].get) if z["types"] else None
         z["name"] = zone_name(k, s, st["labels"])
