@@ -445,6 +445,16 @@ function rememberMine(id) { mine.add(id); try { localStorage.setItem("grid-mine"
 
 // 다른 시민 제안은 기본으로 숨긴다 — 들어올 때마다 깨끗한 지도에서 시작 (서버에는 모두 저장되고 대시보드에는 다 보인다).
 // 위 막대의 제안 수 버튼이나 리포트의 스위치로 켠다. 내가 이 기기에서 올린 제안은 늘 보인다. ?all 이면 켠 채로 시작(발표용)
+// 거리 QR로 새로 들어오면 '내 제안' 기억도 비운다 — 폰 한 대를 여러 사람이 써도(시연) 매번 빈 지도에서 시작.
+// 같은 탭에서 새로고침할 때는 그대로 둔다 (방금 올린 내 제안이 사라지면 헷갈리므로). 서버 데이터는 건드리지 않는다.
+if (QS.has("at") || (QS.has("x") && QS.has("z"))) {
+  try {
+    if (!sessionStorage.getItem("grid-qr-entered")) {
+      sessionStorage.setItem("grid-qr-entered", "1");
+      localStorage.removeItem("grid-mine");
+    }
+  } catch {}
+}
 const mine = new Set(myIds());
 let showOthers = QS.has("all");
 const markerVisible = (c) => !hiddenTypes.has(c.type) && (showOthers || mine.has(c.id));
