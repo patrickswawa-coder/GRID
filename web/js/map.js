@@ -268,8 +268,11 @@ export function buildScene(map) {
   const trees = buildTrees(map);
   group.add(trees);
 
+  const markings = buildRoadMarkings(map);
+  group.add(markings);
+
   // 열섬 레이어(heat.js)가 색을 바꿨다 되돌릴 수 있게 원본을 같이 넘긴다
-  return { group, ground, buildings: mesh, trees, groundTex, groundBase: tex.slice(), roofBase: aRoof.slice() };
+  return { group, ground, buildings: mesh, trees, markings, groundTex, groundBase: tex.slice(), roofBase: aRoof.slice() };
 }
 
 // 공원·임야에는 숲, 도로변 인도에는 가로수
@@ -313,4 +316,108 @@ function buildTrees(map) {
   }
   tree.name = "trees";
   return tree;
+}
+
+// ---------------------------------------------------------------- 도로 표시 (중앙선·가장자리선)
+// 바닥 텍스처는 칸당 1픽셀이라 가는 선을 못 그려서, 얇은 사각형을 도로 위에 따로 깐다 (InstancedMesh 하나).
+// 열섬 레이어를 켜면 숨긴다 (app.js setHeat).
+function buildRoadMarkings(map) {
+  const { width: W, depth: D } = map.meta;
+  const N = W * D;
+  const isRoad = (i) => map.ground[i] === ROAD && !(map.heights[i] > 0);
+  // 차도 칸마다 '차도 밖까지 몇 칸'(4방향 거리) — 가운데일수록 큼
+  const d = new Int16Array(N);
+  const q = new Int32Array(N);
+  let qh = 0, qt = 0;
+  for (let i = 0; i < N; i++) {
+    if (!isRoad(i)) { d[i] = 0; q[qt++] = i; } else d[i] = -1;
+  }
+  while (qh < qt) {
+    const i = q[qh++], x = i % W, z = (i / W) | 0;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, nz = z + dz;
+      if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+      const j = nz * W + nx;
+      if (d[j] < 0) { d[j] = d[i] + 1; q[qt++] = j; }
+    }
+  }
+  for (let i = 0; i < N; i++) if (d[i] < 0) d[i] = 1; // 지도 끝까지 이어진 차도
+  const at = (x, z) => (x < 0 || z < 0 || x >= W || z >= D ? 0 : d[z * W + x]);
+
+  // 넓은 길(폭 3칸=15m 이상) 근처만 가장자리선 — 골목까지 그리면 지저분함
+  const wide = new Uint8Array(N);
+  for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    if (at(x, z) < 2) continue;
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const nx = x + dx, nz = z + dz;
+      if (nx >= 0 && nz >= 0 && nx < W && nz < D) wide[nz * W + nx] = 1;
+    }
+  }
+
+  const quads = [], center = []; // quads: [cx, cz, sx, sz, yellow]
+  const LINE = 0.1, EDGE = 0.14, CENTER = 0.2;
+  const CENTER_MIN = 3; // 폭 5칸(25m) 이상 큰길만 중앙선
+  const MIN_RUN = 8;    // 8칸(40m) 넘게 이어진 것만
+  for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    const i = z * W + x;
+    if (!isRoad(i)) continue;
+    // 가장자리선: 옆 칸이 차도가 아니면 (물·지도 밖 제외) 그쪽 변 안쪽에 흰 선
+    if (wide[i]) {
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+        const j = nz * W + nx;
+        if (isRoad(j) || map.ground[j] === WATER) continue;
+        if (dx) quads.push([x + 0.5 + dx * (0.5 - EDGE), z + 0.5, LINE, 1, 0]);
+        else quads.push([x + 0.5, z + 0.5 + dz * (0.5 - EDGE), 1, LINE, 0]);
+      }
+    }
+    // 중앙선 후보: 길을 가로질러 봤을 때 가운데(거리 최대) — 폭이 홀수면 칸 가운데, 짝수면 두 칸 사이
+    const v = d[i];
+    if (v < CENTER_MIN) continue;
+    if (v > at(x, z - 1)) {
+      if (v > at(x, z + 1)) center.push([i, x + 0.5, z + 0.5, 1, CENTER]);
+      else if (v === at(x, z + 1) && v > at(x, z + 2)) center.push([i, x + 0.5, z + 1, 1, CENTER]);
+    }
+    if (v > at(x - 1, z)) {
+      if (v > at(x + 1, z)) center.push([i, x + 0.5, z + 0.5, CENTER, 1]);
+      else if (v === at(x + 1, z) && v > at(x + 2, z)) center.push([i, x + 1, z + 0.5, CENTER, 1]);
+    }
+  }
+  // 짧게 끊긴 조각(주차장·교차로 한가운데 등)은 버리고 길게 이어진 중앙선만 남긴다
+  const mark = new Int32Array(N).fill(-1);
+  center.forEach(([i], k) => { mark[i] = k; });
+  const comp = new Int32Array(center.length).fill(-1), size = [];
+  for (let k = 0; k < center.length; k++) {
+    if (comp[k] >= 0) continue;
+    const id = size.length, stack = [k];
+    comp[k] = id; size.push(0);
+    while (stack.length) {
+      const c = stack.pop(); size[id]++;
+      const i = center[c][0], x = i % W, z = (i / W) | 0;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+        const j = mark[nz * W + nx];
+        if (j >= 0 && comp[j] < 0) { comp[j] = id; stack.push(j); }
+      }
+    }
+  }
+  center.forEach(([, cx, cz, sx, sz], k) => { if (size[comp[k]] >= MIN_RUN) quads.push([cx, cz, sx, sz, 1]); });
+
+  const geo = new THREE.PlaneGeometry(1, 1);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const mesh = new THREE.InstancedMesh(geo, mat, Math.max(quads.length, 1));
+  const m = new THREE.Matrix4(), col = new THREE.Color();
+  quads.forEach(([cx, cz, sx, sz, y], k) => {
+    m.makeScale(sx, 1, sz).setPosition(cx, 0.02, cz);
+    mesh.setMatrixAt(k, m);
+    mesh.setColorAt(k, col.setHex(y ? 0xf2c12e : 0xf1f3f5));
+  });
+  mesh.count = quads.length;
+  mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
+  mesh.name = "road-markings";
+  return mesh;
 }
