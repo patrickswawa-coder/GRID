@@ -1,4 +1,4 @@
-// 제안·신고 유형 — docs/CONVENTIONS.md 5장, backend/main.py TYPES, dashboard/app.py TYPE_LABELS 와 같게 유지
+// 제안·신고 유형 — docs/CONVENTIONS.md 5장, backend/main.py TYPES 와 같게 유지 (대시보드 web/admin 도 이 파일을 씀)
 //
 // group "fix"  : 열섬을 줄이는 개선 제안 → effect 로 시뮬레이션 (heat.js buildMods)
 // group "report": 환경 불편 신고 (시뮬레이션 효과 없음, 데이터로만 수집)

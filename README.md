@@ -10,7 +10,7 @@
 ```
 시민 폰 ──QR──▶ web/ (Three.js 3D 맵) ──POST──▶ backend/ (FastAPI + SQLite + Bedrock AI)
                                                         │
-                                   dashboard/ (Streamlit) ◀── GET
+                                   web/admin/ (지자체 대시보드) ◀── GET
 data/ : V-World SHP ──▶ web/data/voxels.json (미리 변환)
 ```
 
@@ -27,7 +27,7 @@ git clone https://github.com/patrickswawa-coder/GRID.git
 cd GRID
 python -m venv .venv
 # Mac/Linux: source .venv/bin/activate     Windows: .venv\Scripts\activate
-pip install -r backend/requirements.txt -r dashboard/requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 데이터 파트만 추가로: `pip install -r data/requirements.txt`
@@ -49,12 +49,6 @@ $env:SERVE_WEB="1"; $env:AI_ENABLED="0"; $env:POST_INTERVAL="0"; uvicorn main:ap
 cd data && python seed_complaints.py --n 80
 ```
 
-터미널 3 — (선택) 예전 Streamlit 대시보드. 이제 `/admin/` 이 같은 기능을 하므로 보통 필요 없음
-```bash
-streamlit run dashboard/app.py
-```
-→ http://localhost:8501
-
 같은 와이파이의 폰으로 보려면 `uvicorn ... --host 0.0.0.0` 으로 띄우고 `http://내PC IP:8000` 접속.
 
 ## 지금 상태 (11/8 기준)
@@ -66,7 +60,7 @@ streamlit run dashboard/app.py
 | 다른 시민 민원 표시, 공감 | ✅ (8초마다 새로고침) |
 | 민원 API + SQLite + 테스트 | ✅ |
 | AI 긴급도 분류 / 요약 (Bedrock) | ✅ 코드 있음 — 서버에서 모델 ID 확인 필요. AI 없으면 통계 요약으로 대체 |
-| Streamlit 대시보드 | ✅ 지표·히트맵·유형/구역 통계·AI 요약·CSV |
+| 지자체 대시보드 (`/admin/`) | ✅ 5m 열섬 지도·우선 개선 구역·정책 제안·통계·처리 상태·CSV (HTML/JS + ECharts) |
 | 실제 무실동 맵 변환기 | ✅ 코드 있음 — SHP 받아서 실행 필요 |
 | 서버 배포 (7조 서버 32.190.9.9) | 📝 `deploy/README.md` — 접속 후 한 줄로 설정 |
 | QR 코드 | ✅ `python data/make_qr.py http://서버주소/ --spots data/qr_spots.csv` → `data/qr/` 장소별 포스터 (거리 QR 위치 모드) |
