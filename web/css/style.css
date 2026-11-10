@@ -150,7 +150,18 @@ button { font: inherit; }
 #tool-sim[aria-pressed="true"] { background: #2f9e44; }
 #tool-labels[aria-pressed="true"] { background: rgba(255,255,255,.94); color: var(--ink); }
 #tool-labels[aria-pressed="false"] { opacity: .55; }
-body.sheet-open .tools { display: none; }
+/* 설명 말풍선: PC는 마우스 올리면, 폰은 누를 때 잠깐 (app.js .tip-show) */
+.tool { position: relative; }
+.tool::after {
+  content: attr(data-tip); position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%);
+  background: rgba(29,36,51,.92); color: #fff; font-size: 12.5px; font-weight: 500; line-height: 1.35;
+  padding: 6px 10px; border-radius: 8px; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity .15s; transition-delay: 0s;
+}
+@media (hover: hover) and (pointer: fine) { .tool:hover::after { opacity: 1; transition-delay: .25s; } }
+.tool.tip-show::after { opacity: 1; }
+/* 폰: 막대가 화면 아래쪽 → 화면 아래 시트와 겹치므로 시트가 열리면 숨김. PC는 계속 보임 */
+@media (max-width: 480px) { body.sheet-open .tools { display: none; } }
 .env-now { right: 86px; }
 
 /* ---- 리포트 패널 */
@@ -220,6 +231,9 @@ body.sheet-open .tools { display: none; }
   .tool { flex: 1; width: auto; padding: 5px 0 4px; border-radius: 12px; }
   .tool span { font-size: 17px; }
   .tool small { font-size: 9.5px; }
+  /* 폰: 말풍선을 막대 전체 폭 위에 (버튼 기준이면 화면 밖으로 잘림) */
+  .tool { position: static; }
+  .tool::after { left: 0; right: 0; top: auto; bottom: calc(100% + 8px); transform: none; text-align: center; white-space: normal; }
   .env-now { right: 8px; bottom: calc(env(safe-area-inset-bottom) + 66px); }
   .types { grid-template-columns: repeat(3, 1fr); }
 }
