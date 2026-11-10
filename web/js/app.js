@@ -1243,8 +1243,10 @@ function updateProbe() {
   el.hidden = !show || probeOff;
   ch.hidden = !(heatOn && map && !HOVER);
   if (!show) return;
+  // 카드 위치는 매 프레임 마우스를 따라감 (수치 계산만 아래에서 띄엄띄엄 — 건물 2만여 개 광선 검사가 무거움)
+  if (HOVER) { el.style.left = mouse.x + "px"; el.style.top = mouse.y + "px"; }
   const now = performance.now();
-  if (now - probeAt < (HOVER ? 120 : 90)) return;
+  if (now - probeAt < (HOVER ? 80 : 90)) return;
   probeAt = now;
   const px = HOVER ? mouse.x : innerWidth / 2, py = HOVER ? mouse.y : innerHeight / 2;
   ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
@@ -1270,7 +1272,6 @@ function updateProbe() {
   el.style.borderLeftColor = lv.color;
   el.innerHTML = `🌡️ <span class="v" style="color:${lv.color}">${v}</span><span class="lv" style="color:${lv.color}">${lv.text}</span><br>${tLine}${sim}`;
   el.classList.toggle("center", !HOVER);
-  if (HOVER) { el.style.left = px + "px"; el.style.top = py + "px"; }
 }
 
 // ---------------------------------------------------------------- 실시간 기온·대기질 (에어코리아·기상청)
