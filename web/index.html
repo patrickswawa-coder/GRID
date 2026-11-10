@@ -88,8 +88,9 @@
       <details class="method">
         <summary>열섬 지수는 어떻게 계산하나요?</summary>
         <p>국토부 브이월드 건물·지적도로 5m 칸마다 <b>주변 50m</b>의 포장면·건물·녹지·물 비율을 계산해요.</p>
-        <p>포장면·건물이 많을수록 ↑, 녹지·물이 많을수록 ↓ (0 시원함 ~ 100 뜨거움)</p>
-        <p class="muted-note">실제로 잰 온도가 아니라 <b>추정 지표</b>예요. 다음 단계로 위성 지표온도로 보정할 예정이에요. 기온·미세먼지는 기상청·에어코리아 실시간 값이에요.</p>
+        <p>건물 지붕·포장면이 많을수록 ↑ (고층 단지는 그늘 덕에 조금 ↓), 녹지·물이 많을수록 ↓ (0 시원함 ~ 100 뜨거움)</p>
+        <p>가중치는 <b>Landsat 위성 여름 지표온도</b>(2023~2025년 5장면)에 맞춰 정했어요. 위성 온도와 비교하면 <b>상관 0.88</b>이에요.</p>
+        <p class="muted-note">땅 표면 온도 기준이라 기온과는 달라요. 10점 차이 ≈ 여름 한낮 표면 약 1.3°C. 기온·미세먼지는 기상청·에어코리아 실시간 값이에요.</p>
       </details>
       <button id="intro-ok" class="primary" type="button">시작하기</button>
       <a class="intro-admin" href="admin/">지자체 대시보드 보기</a>
@@ -101,7 +102,7 @@
     <span class="legend-row"><span class="legend-title">열섬 위험 지수</span>
       <span class="legend-scale-wrap"><span class="legend-bar"></span><span class="legend-scale"><span>0 시원함</span><span>50</span><span>100 뜨거움</span></span></span>
       <span class="legend-more" aria-hidden="true">?</span></span>
-    <span class="legend-note">주변 50m의 포장면·건물이 많을수록 높고, 녹지·물이 많을수록 낮아요.<br>무실동 평균 <b id="heatAvg">-</b>, 가장 높은 곳 <b id="heatTop">-</b></span>
+    <span class="legend-note">주변 50m의 지붕·포장면이 많을수록 높고, 녹지·물이 많을수록 낮아요 (위성 보정).<br>무실동 평균 <b id="heatAvg">-</b>, 가장 높은 곳 <b id="heatTop">-</b></span>
   </button>
   <div id="offline" class="offline" hidden>서버와 연결이 끊겼어요. 다시 시도하는 중…</div>
 

@@ -4,7 +4,7 @@ import { MapControls } from "three/addons/controls/MapControls.js";
 import { loadMap, buildScene, heightAt, cellToLatLng, latLngToCell, zoneOf } from "./map.js";
 import { makeMarker } from "./markers.js";
 import { loadLabels } from "./labels.js";
-import { computeHeat, paintHeat, heatLevel, zoneHeat, scoreAt, buildMods, meanHeat, heatRGB } from "./heat.js";
+import { computeHeat, paintHeat, heatLevel, zoneHeat, scoreAt, buildMods, meanHeat, heatRGB, tempOffset } from "./heat.js";
 import { TYPES, TYPE_BY_CODE, FIX_TYPES, REPORT_TYPES } from "./types.js";
 import { expandCells, expandAll, isMulti, pathLength, MAX_CELLS, MAX_POINTS } from "./shape.js";
 
@@ -278,7 +278,7 @@ function showSpotCard() {
   const lv = heatLevel(v), dT = tempOffset(v);
   $("#spotName").textContent = spot.name;
   $("#spotHeat").innerHTML = `🌡️ 이곳 열섬 지수 <b style="color:${lv.color}">${v} ${lv.text}</b><br>` +
-    `여름 한낮엔 보통 지역보다 약 ${dT >= 0 ? "+" : "−"}${Math.abs(dT).toFixed(1)}°C <small>(추정)</small>`;
+    `여름 한낮 땅 표면이 동네 평균보다 약 ${dT >= 0 ? "+" : "−"}${Math.abs(dT).toFixed(1)}°C <small>(위성 보정)</small>`;
   $("#spotCard").hidden = false;
   document.body.classList.add("spot-open");
 }
@@ -1314,8 +1314,6 @@ const probeHit = new THREE.Vector3();
 canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") mouse = { x: e.clientX, y: e.clientY }; });
 canvas.addEventListener("pointerleave", () => { mouse = null; });
 
-// 열섬 지수 → 주변 평균 대비 추정 기온 차이 (PoC 가정: 지수 0점 −3°C ~ 100점 +3°C, 도시 열섬 강도 문헌값 수준)
-const tempOffset = (v) => (v - 50) * 0.06;
 
 function updateProbe() {
   const el = $("#probe"), ch = $("#crosshair");
@@ -1344,7 +1342,7 @@ function updateProbe() {
   const lv = heatLevel(v);
   // 지수는 '여름철 열이 쌓이는 정도'라서 지금 기온(겨울엔 10°C 등)에 더하지 않고, 여름 한낮 기준 차이만 보여준다
   const dT = tempOffset(v);
-  const tLine = `<small>여름 한낮엔 보통 지역보다 약 ${dT >= 0 ? "+" : "−"}${Math.abs(dT).toFixed(1)}°C <span class="muted">(추정)</span></small>`;
+  const tLine = `<small>여름 한낮 땅 표면이 동네 평균보다 약 ${dT >= 0 ? "+" : "−"}${Math.abs(dT).toFixed(1)}°C <span class="muted">(위성 보정)</span></small>`;
   let sim = "";
   if (simOn && heatSim) {
     const d = Math.round(heat.value[z * map.meta.width + x]) - v;

@@ -1,10 +1,11 @@
 // 열섬 위험 지수: 칸마다 주변(반경 R칸)의 포장면·건물·녹지·물 비율로 계산 → 0(시원)~100(뜨거움)
 //
-//   지수 = 0.45·포장면 + 0.20·건물덮개 + 0.15·건물높이 − 0.45·녹지 − 0.30·물   (주변 평균)
+//   추정 지표온도 차(°C) = 4.0·포장면 + 17.4·건물덮개 − 21.8·건물높이 − 4.6·녹지 − 3.0·물   (주변 50m 평균)
+//   지수 = 그 값을 −4.6°C → 0점, +8.4°C → 100점으로 (10점 ≈ 1.3°C)
 //
-// 근거(발표용): 도시 지표면 온도는 불투수면(포장·지붕) 비율과 양(+)의 관계, 녹지(식생)·수면 비율과
-// 음(−)의 관계가 일관되게 보고됨. 고층 밀집은 바람길을 막고 야간 복사냉각을 줄여 열을 가둔다.
-// 가중치는 PoC용 단순 모델이며, 위성 지표온도(Landsat 등)로 보정하는 것이 다음 단계.
+// 가중치는 Landsat 8·9 여름 지표온도 5장면(2023~2025)에 맞춘 값 (data/calibrate_lst.py, docs/HEAT.md).
+// 위성 결과: 지붕이 가장 뜨겁고(도로보다 +), 고층 단지는 그늘·조경 때문에 저층보다 덜 뜨거움.
+// 물은 하천 폭이 좁아 위성(100m)으로는 효과가 거의 안 잡혀, 문헌 수준의 작은 값(−3°C)을 둠.
 import * as THREE from "three";
 
 const GRASS = 0, ROAD = 1, SIDEWALK = 2, PARK = 3, WATER = 4;
@@ -43,7 +44,7 @@ function features(map, i, mods, out) {
   else if (t === WATER) w = 1;
   if (mods) {
     const rc = mods.roofCut[i];
-    if (rc && h > 0) { b *= 1 - rc * 0.5; hh *= 1 - rc * 0.5; im *= 1 - rc * 0.8; g = Math.max(g, rc * 0.7); }
+    if (rc && h > 0) { b *= 1 - rc * 0.5; im *= 1 - rc * 0.8; g = Math.max(g, rc * 0.7); } // 옥상녹화는 높이를 바꾸지 않음
     const ic = mods.impCut[i];
     if (ic && h === 0) im *= 1 - ic;
     const eg = mods.green[i];
@@ -54,7 +55,7 @@ function features(map, i, mods, out) {
   out[0] = im; out[1] = b; out[2] = hh; out[3] = g; out[4] = w;
 }
 
-const W8 = [0.45, 0.2, 0.15, -0.45, -0.3]; // 포장면, 건물덮개, 높이, 녹지(−), 수면(−)
+const W8 = [4.0, 17.4, -21.8, -4.6, -3.0]; // 포장면, 건물덮개, 높이(−), 녹지(−), 수면(−) — 위성 보정 (°C)
 
 /** mods: buildMods() 결과 또는 null. 반환: { value: Float32Array(0~100, 칸별) } */
 export function computeHeat(map, mods = null) {
@@ -68,7 +69,6 @@ export function computeHeat(map, mods = null) {
   }
   const raw = boxMean(comb, W, D, RADIUS);
   // 고정 구간으로 0~100 변환 (시뮬레이션 전후 비교가 가능하도록 지도마다 다시 정규화하지 않음)
-  // 시가지 값이 좁은 구간(0.15~0.55)에 몰려 있어서 그 구간을 넓게 펼친다
   const value = new Float32Array(N);
   for (let i = 0; i < N; i++) value[i] = toScore(raw[i]);
   return { value };
@@ -119,7 +119,11 @@ export function meanHeat(heat) {
   return t / heat.value.length;
 }
 
-const ANCHORS = [[-0.45, 0], [0.15, 40], [0.42, 70], [0.56, 100]];
+// 추정 지표온도 차 −4.6°C(숲) → 0점, +8.4°C(무실동 상위 0.5%) → 100점, 그 사이 직선
+export const T0 = -4.6, T100 = 8.4;
+const ANCHORS = [[T0, 0], [T100, 100]];
+/** 지수 → 여름 한낮 지표온도가 무실동 평균보다 몇 °C 높은지 (위성 보정, 평균 지수 ≈ 36점 ≈ 0°C) */
+export const tempOffset = (v) => T0 + (v / 100) * (T100 - T0);
 function toScore(r) {
   if (r <= ANCHORS[0][0]) return 0;
   for (let k = 1; k < ANCHORS.length; k++) {
@@ -185,5 +189,6 @@ export function zoneHeat(map, heat) {
     (acc[key] ||= [0, 0]);
     acc[key][0] += heat.value[z * W + x]; acc[key][1]++;
   }
-  return Object.fromEntries(Object.entries(acc).map(([k, [sum, n]]) => [k, Math.round(sum / n)]));
+  // 지도 가장자리의 얇은 조각 구역(정사각형의 1/4 미만)은 순위에서 뺌 — 몇 줄짜리 지붕만으로 1등이 되는 것 방지
+  return Object.fromEntries(Object.entries(acc).filter(([, [, n]]) => n >= (s * s) / 4).map(([k, [sum, n]]) => [k, Math.round(sum / n)]));
 }
