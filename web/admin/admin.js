@@ -31,9 +31,14 @@ async function get(path) {
   return r.json();
 }
 const safe = (p) => p.catch(() => null);
+async function getAdm(path) {
+  const r = await fetch(API + path, { cache: "no-store", headers: { "X-Admin-Token": admin.token } });
+  if (!r.ok) throw new Error(`${path} ${r.status}`);
+  return r.json();
+}
 
 const STATUS = { received: "접수", working: "처리중", done: "처리 완료" };
-let state = { complaints: [], prio: [], meta: null, map: null, heat: null, env: null, hot: null, labels: [], filter: new Set(), sfilter: "" };
+let state = { complaints: [], flagged: [], prio: [], meta: null, map: null, heat: null, env: null, hot: null, labels: [], filter: new Set(), sfilter: "" };
 
 // ---------------------------------------------------------------- 관리자 (로그인·상태 변경·삭제)
 const admin = { required: false, token: (() => { try { return sessionStorage.getItem("grid-admin") || ""; } catch { return ""; } })() };
@@ -345,13 +350,20 @@ function redrawMap() {
 }
 
 // ---------------------------------------------------------------- 민원
+// 장난·부적절 거르기: moderation 'review'(자동으로 걸림)·'hidden'(관리자가 숨김)은 시민 지도·통계에서 빠진다.
+// 관리자 화면에서도 기본 목록·차트에서는 빼고, '확인 필요' 칩을 눌렀을 때만 따로 보여준다.
+const isPublic = (c) => !c.moderation || c.moderation === "ok";
+const MOD = { review: "확인 필요", hidden: "숨김" };
 function filtered() {
+  if (state.sfilter === "review") return state.flagged;
   return state.complaints.filter((c) => (!state.filter.size || state.filter.has(c.type)) && (!state.sfilter || c.status === state.sfilter));
 }
 function renderSChips() {
-  const n = (k) => state.complaints.filter((c) => !k || c.status === k).length;
+  const pub = state.complaints, nHid = state.flagged.length;
+  const n = (k) => pub.filter((c) => !k || c.status === k).length;
   $("schips").innerHTML = [["", "전체"], ...Object.entries(STATUS)].map(([k, l]) =>
-    `<button type="button" class="chip" data-s="${k}" aria-pressed="${state.sfilter === k}">${l} ${n(k)}</button>`).join("");
+    `<button type="button" class="chip" data-s="${k}" aria-pressed="${state.sfilter === k}">${l} ${n(k)}</button>`).join("") +
+    (nHid ? `<button type="button" class="chip chip-review" data-s="review" aria-pressed="${state.sfilter === "review"}">확인 필요 ${nHid}</button>` : "");
 }
 $("schips").addEventListener("click", (e) => {
   const b = e.target.closest(".chip"); if (!b) return;
@@ -417,12 +429,15 @@ function renderComplaints() {
   const csvRows = sorted.map((c) => [c.id, tLabel(c.type), zn[c.zone] || c.zone, c.text, c.likes, URGENCY[c.ai_urgency] || "", STATUS[c.status] || c.status, c.created_at.replace("T", " ").slice(0, 19), c.reply || ""]);
   const adm = canAdmin();
   const opts = (cur) => Object.entries(STATUS).map(([k, l]) => `<option value="${k}"${k === cur ? " selected" : ""}>${l}</option>`).join("");
-  const rowHtml = (c) => `<tr data-id="${c.id}"><td class="num">${c.id}</td><td>${esc(tLabel(c.type))}</td><td>${esc((zn[c.zone] || c.zone).replace(" 주변", ""))}</td>
-    <td class="wrap">${esc(c.text)}${c.reply ? `<span class="reply">${esc(c.reply)}</span>` : ""}</td><td class="num">${c.likes}</td>
+  const modHtml = (c) => isPublic(c) ? "" : `<span class="mod">${MOD[c.moderation] || c.moderation}${c.mod_reason ? ` · ${esc(c.mod_reason)}` : ""}</span>`;
+  const rowHtml = (c) => `<tr data-id="${c.id}"${isPublic(c) ? "" : ` class="is-hidden"`}><td class="num">${c.id}</td><td>${esc(tLabel(c.type))}</td><td>${esc((zn[c.zone] || c.zone).replace(" 주변", ""))}</td>
+    <td class="wrap">${modHtml(c)}${esc(c.text)}${c.reply ? `<span class="reply">${esc(c.reply)}</span>` : ""}</td><td class="num">${c.likes}</td>
     <td>${URGENCY[c.ai_urgency] ? `<span class="urg u${c.ai_urgency}">${URGENCY[c.ai_urgency]}</span>` : ""}</td>
     <td>${adm ? `<select class="st" aria-label="처리 상태">${opts(c.status)}</select>` : `<span class="badge ${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>`}</td>
     <td>${esc(c.created_at.replace("T", " ").slice(5, 16))}</td>
-    <td>${adm ? `<button class="mini" data-a="reply" type="button">답변</button><button class="mini del" data-a="del" type="button">삭제</button>` : ""}</td></tr>`;
+    <td>${adm ? `<button class="mini" data-a="reply" type="button">답변</button>${isPublic(c)
+      ? `<button class="mini" data-a="hide" type="button" title="시민 지도·통계에서 숨겨요 (삭제 아님)">숨기기</button>`
+      : `<button class="mini ok" data-a="show" type="button" title="문제없으면 다시 공개해요">보이기</button>`}<button class="mini del" data-a="del" type="button">삭제</button>` : ""}</td></tr>`;
   const shown = ["번호", "유형", "구역", "내용", "공감", "AI 긴급도", "상태", "접수", adm ? "관리" : ""];
   $("list").innerHTML = `<tr>${shown.map((h, i) => `<th class="${i === 0 || i === 4 ? "num" : ""}">${h}</th>`).join("")}</tr>` + sorted.slice(0, 300).map(rowHtml).join("");
   const rows = csvRows;
@@ -455,9 +470,11 @@ $("list").addEventListener("change", async (e) => {
 });
 $("list").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-a]"); if (!btn) return;
-  const id = +btn.closest("tr").dataset.id, c = state.complaints.find((x) => x.id === id);
+  const id = +btn.closest("tr").dataset.id, c = [...state.complaints, ...state.flagged].find((x) => x.id === id);
   try {
-    if (btn.dataset.a === "del") {
+    if (btn.dataset.a === "hide" || btn.dataset.a === "show") {
+      await act(`/api/complaints/${id}`, "PATCH", { moderation: btn.dataset.a === "hide" ? "hidden" : "ok" });
+    } else if (btn.dataset.a === "del") {
       if (!confirm(`#${id} 민원을 삭제할까요?\n"${c?.text ?? ""}"\n삭제하면 되돌릴 수 없어요.`)) return;
       await act(`/api/complaints/${id}`, "DELETE");
     } else {
@@ -473,9 +490,14 @@ $("list").addEventListener("click", async (e) => {
 async function refresh() {
   const st = $("status");
   try {
-    const [complaints, prio, env] = await Promise.all([get("/api/complaints?limit=2000"), get("/api/priority?limit=300"), safe(get("/api/env"))]);
+    // 관리자로 로그인했으면 숨김·확인 필요 민원까지 받는다 (토큰이 틀리면 서버가 공개 민원만 준다)
+    const list = canAdmin() ? getAdm("/api/complaints?limit=2000&all=1") : get("/api/complaints?limit=2000");
+    const [complaints, prio, env] = await Promise.all([list, get("/api/priority?limit=300"), safe(get("/api/env"))]);
     if (!state.meta) state.meta = await safe(get("/api/meta"));
-    state.complaints = complaints; state.prio = prio; state.env = env;
+    // 지도·KPI·차트는 공개 민원만, 숨김·확인 필요는 따로 (목록의 '확인 필요' 칩)
+    state.complaints = complaints.filter(isPublic); state.flagged = complaints.filter((c) => !isPublic(c));
+    if (!state.flagged.length && state.sfilter === "review") state.sfilter = "";
+    state.prio = prio; state.env = env;
     renderKpis(env); renderTop5(prio); renderPrioTable(prio); redrawMap(); drawQuadrant(prio);
     if (!document.activeElement?.matches?.("select.st")) renderComplaints(); else renderSChips();
     st.className = "status ok"; st.textContent = "실시간 · 10초마다 갱신";

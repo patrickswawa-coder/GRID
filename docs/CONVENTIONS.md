@@ -85,6 +85,12 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 | `likes` | int | 공감 수 |
 | `ai_urgency` | int \| null | AI가 매긴 긴급도 1(낮음)~3(높음), AI 꺼져 있으면 null |
 | `ai_tag` | str \| null | AI가 붙인 한 단어 태그 (예: "야간안전") |
+| `moderation` | str \| null | 장난·부적절 거르기. null=정상, `"review"`=확인 필요(규칙·AI가 자동으로), `"hidden"`=관리자가 숨김, `"ok"`=관리자가 확인함 |
+| `mod_reason` | str \| null | 걸린 이유 (예: "자음·모음만 있는 글", "AI: 놀이기구 요청", "관리자 숨김") |
+
+**장난·부적절 거르기** (`backend/moderation.py` + AI): 욕설·비하는 등록 거절(400). 의미 없는 글(자음만·같은 글자 반복·자판 막치기)과
+AI가 "동네 환경과 무관한 장난"이라고 본 글(직접 쓴 글만 판단)은 받되 `review`. `review`·`hidden` 은 **시민 지도·sync·통계·AI 요약·우선순위에서
+빠지고**, 올린 기기(`X-Client-Id`)에는 그대로 보임(걸린 걸 모르게). 관리자가 `ok` 로 바꾸면 다시 공개되고 AI 가 다시 숨기지 않음.
 | `x2`, `z2` | int \| null | (선택) 여러 칸 제안의 끝점(자유 그리기·줄) 또는 반대 모서리(네모). 한 칸 제안은 null |
 | `shape` | str \| null | (선택) `"path"` 자유 그리기 / `"area"` 네모 / `"line"` 줄(예전 방식). null 이면 한 칸. 개선 제안 유형만 가능 |
 | `points` | [[x,z],…] \| null | (선택) `path` 일 때 손가락이 지나간 칸 목록. 첫 점 = (`x`,`z`), 최대 300점. 서버가 마지막 점으로 `x2`,`z2` 를 채움 |
@@ -120,13 +126,13 @@ data/ (Python) : V-World SHP → web/data/voxels.json  (미리 한 번 만들어
 | 메서드 | 주소 | 설명 |
 |---|---|---|
 | GET | `/api/health` | `{"status":"ok"}` |
-| GET | `/api/complaints?since_id=0&limit=500` | 민원 목록 (id 오름차순). `since_id`보다 큰 것만 |
+| GET | `/api/complaints?since_id=0&limit=500` | 민원 목록 (id 오름차순). `since_id`보다 큰 것만. 공개 민원 + 요청한 기기가 올린 것. **관리자**는 `&all=1` + `X-Admin-Token` 이면 숨김·확인 필요까지 전부 |
 | POST | `/api/complaints` | 등록. body: `{x, z, lat, lng, zone, type, text}` (+ 선택 `shape`, `x2, z2` 또는 `points`, 50곳 넘으면 400) → 저장된 민원. `text`는 비워도 됨(비우면 "<유형> 요청"으로 저장). 같은 기기(`X-Client-Id`, 없으면 IP)가 `POST_INTERVAL`초 안에 다시 보내면 429, 같은 기기·칸·유형을 10분 안에 다시 보내면 409, 같은 IP는 분당 `IP_PER_MIN`(60)건까지 (같은 와이파이 여러 명은 서로 막히지 않음) |
 | POST | `/api/complaints/{id}/like` | 공감 +1 → 갱신된 민원. 같은 `X-Client-Id`(없으면 같은 IP)가 같은 민원에 다시 누르면 409 |
-| GET | `/api/stats` | `{total, by_type:{}, by_zone:{}, top_zones:[{zone,count,top_type}], today}` |
+| GET | `/api/stats` | `{total, by_type:{}, by_zone:{}, top_zones:[{zone,count,top_type}], today, hidden}` (공개 민원 기준, `hidden`=숨김·확인 필요 수) |
 | GET | `/api/ai/summary` | `{summary, generated_at, ai:true/false}` 최근 민원 요약 (5분 캐시) |
 | GET | `/api/complaints/sync` | 가벼운 `[{id,status,likes,reply}]` 전체 — 시민 지도가 상태 변경·삭제를 반영할 때 |
-| PATCH | `/api/complaints/{id}` | **관리자** `{status?, reply?}` → 갱신된 민원 |
+| PATCH | `/api/complaints/{id}` | **관리자** `{status?, reply?, moderation?: "hidden"\|"ok"}` → 갱신된 민원 (숨기기 / 다시 보이기) |
 | DELETE | `/api/complaints/{id}` | **관리자** 삭제 |
 | GET | `/api/admin/auth` · POST `/api/admin/login` | 비밀번호 필요 여부 · `{password}` 확인 |
 | GET | `/api/admin/backup` | **관리자** DB 파일 내려받기 |
