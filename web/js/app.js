@@ -1227,7 +1227,7 @@ function heatHTML(x, z) {
 // ---------------------------------------------------------------- 실시간 열섬 지수 읽기
 // PC: 마우스가 가리키는 곳 / 폰(터치): 화면 가운데 십자. 열섬 지도가 켜져 있을 때만.
 const HOVER = matchMedia("(hover: hover) and (pointer: fine)").matches;
-let mouse = null, probeAt = 0;
+let mouse = null, probeAt = 0, probeOff = false; // probeOff: 지도 밖(하늘)을 가리키는 중
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const probeHit = new THREE.Vector3();
 canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") mouse = { x: e.clientX, y: e.clientY }; });
@@ -1239,7 +1239,8 @@ const tempOffset = (v) => (v - 50) * 0.06;
 function updateProbe() {
   const el = $("#probe"), ch = $("#crosshair");
   const show = heatOn && map && (!HOVER || mouse);
-  el.hidden = !show;
+  // 매 프레임 '보이기'로 되돌리지 않게 지도 밖 상태를 기억 (안 그러면 하늘 쪽에서 깜빡임)
+  el.hidden = !show || probeOff;
   ch.hidden = !(heatOn && map && !HOVER);
   if (!show) return;
   const now = performance.now();
@@ -1251,9 +1252,10 @@ function updateProbe() {
   // PC는 건물까지 정확히 (마우스 아래 건물), 폰은 가벼운 지면 계산
   const hit = HOVER ? ray.intersectObject(world.buildings, false)[0] : null;
   if (hit) probeHit.copy(hit.point).addScaledVector(hit.face.normal, -0.01);
-  else if (!ray.ray.intersectPlane(groundPlane, probeHit)) { el.hidden = true; return; }
+  else if (!ray.ray.intersectPlane(groundPlane, probeHit)) { probeOff = el.hidden = true; return; }
   const x = Math.floor(probeHit.x), z = Math.floor(probeHit.z);
-  if (x < 0 || z < 0 || x >= map.meta.width || z >= map.meta.depth) { el.hidden = true; return; }
+  if (x < 0 || z < 0 || x >= map.meta.width || z >= map.meta.depth) { probeOff = el.hidden = true; return; }
+  probeOff = el.hidden = false;
   const h = simOn && heatSim ? heatSim : heat;
   const v = Math.round(h.value[z * map.meta.width + x]);
   const lv = heatLevel(v);
