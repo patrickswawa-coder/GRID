@@ -188,3 +188,10 @@ dialog input { display: block; width: 100%; margin-top: 4px; padding: 7px 9px; b
   .kpi b { font-size: 24px; }
 }
 @media print { body > *:not(dialog) { display: none !important; } dialog { position: static; box-shadow: none; max-width: none; } .dlg-actions, dialog label, #qrwarn { display: none !important; } }
+
+/* 장난·부적절 거르기: 확인 필요·숨김 */
+.chip-review { border-color: #f2b8a4; color: #b4401c; }
+.chip-review[aria-pressed="true"] { background: #b4401c; border-color: #b4401c; color: #fff; }
+tr.is-hidden td { color: var(--mute); }
+.mod { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 6px; background: #fde8e1; color: #b4401c; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.mini.ok:hover { border-color: var(--cool); color: var(--cool-ink); }

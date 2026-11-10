@@ -277,7 +277,9 @@ def api_priority(limit: int = 30):
     from main import db  # 순환 import 방지
 
     with db() as conn:
-        rows = [dict(r) for r in conn.execute("SELECT x, z, x2, z2, shape, points, type, likes, id FROM complaints").fetchall()]
+        # 숨김·확인 필요 민원은 우선순위 계산에서 뺀다 (main.PUBLIC 과 같은 조건)
+        rows = [dict(r) for r in conn.execute("SELECT x, z, x2, z2, shape, points, type, likes, id FROM complaints"
+                                              " WHERE moderation IS NULL OR moderation = 'ok'").fetchall()]
     key = (len(rows), max((r["id"] for r in rows), default=0), sum(r["likes"] for r in rows))
     if _cache["key"] != key:
         _cache.update(key=key, data=priority(rows))
