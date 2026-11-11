@@ -499,3 +499,35 @@ body.spot-open .toast { bottom: calc(var(--safe-b) + 250px); }
   }
   .mouse-hint b { color: var(--ink); font-weight: 650; margin-right: 4px; }
 }
+
+/* ---------------------------------------------------------------- '제안 반영 후' 결과 카드 + 재생 */
+.sim-hud {
+  position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t) + var(--gap));
+  width: min(560px, calc(100% - 2 * var(--gap))); padding: 12px 16px 12px;
+  background: rgba(10, 40, 60, .86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  color: #fff; border-radius: 18px; box-shadow: 0 10px 30px rgba(0, 30, 50, .35);
+  animation: hudIn .45s cubic-bezier(.2, .8, .2, 1);
+}
+@keyframes hudIn { from { opacity: 0; transform: translate(-50%, -14px); } }
+.sim-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14.5px; }
+.sim-play {
+  border: 0; cursor: pointer; border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13.5px; font-weight: 700;
+  background: #40c8ff; color: #062a3c; white-space: nowrap; box-shadow: 0 0 0 0 rgba(64, 200, 255, .6); animation: pulse 2s infinite;
+}
+.sim-play.playing { background: #fff; color: #0a2840; animation: none; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 10px rgba(64, 200, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(64, 200, 255, 0); } }
+.sim-nums { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 8px; margin-top: 8px; }
+.sim-nums div { display: grid; gap: 1px; }
+.sim-nums small { font-size: 11.5px; color: #a8c8dc; white-space: nowrap; }
+.sim-nums b { font-size: 28px; font-weight: 800; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1.1; white-space: nowrap; }
+.sim-nums i { font-style: normal; font-size: 18px; color: #a8c8dc; margin: 0 5px; vertical-align: 4px; }
+.sim-nums em { font-style: normal; font-size: 14px; font-weight: 600; margin-left: 2px; color: #cfe3ef; }
+.sim-nums .cool { color: #6fd8ff; }
+.sim-caption { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, .14); font-size: 13px; color: #dbeaf3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sim-caption b { color: #6fd8ff; }
+body.sim-show .legend { display: none; }
+@media (max-width: 600px) {
+  .sim-hud { top: calc(var(--safe-t) + var(--gap) + 62px); padding: 10px 12px; }
+  .sim-nums b { font-size: 21px; }
+  .sim-nums small { font-size: 10.5px; }
+}

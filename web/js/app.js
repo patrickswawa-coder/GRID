@@ -7,6 +7,7 @@ import { makeMarker, makeMineTag } from "./markers.js";
 import { loadLabels } from "./labels.js";
 import { startTour, tourActive } from "./tour.js";
 import { computeHeat, paintHeat, heatLevel, zoneHeat, scoreAt, buildMods, meanHeat, heatRGB, tempOffset } from "./heat.js";
+import { animateBlend, coolStats, regionOf, addRipple, tickRipples } from "./simfx.js";
 import { TYPES, TYPE_BY_CODE, FIX_TYPES, REPORT_TYPES } from "./types.js";
 import { expandCells, expandAll, isMulti, pathLength, MAX_CELLS, MAX_POINTS } from "./shape.js";
 
@@ -390,6 +391,7 @@ function loop() {
     const s = k * (1 + 0.12 * Math.sin(performance.now() / 220));
     endCursor.scale.set(s, 1, s);
   }
+  tickRipples();
   for (const { obj } of markers.values()) {
     if (obj.userData.drop > 0) {
       obj.userData.drop = Math.max(0, obj.userData.drop - 0.6);
@@ -1169,17 +1171,31 @@ function proposals() {
   return [...markers.values()].map((m) => m.data).filter((c) => TYPE_BY_CODE[c.type]?.effect);
 }
 function setSim(on, quiet = false) {
+  stopSimFx();
   simOn = on;
+  document.body.classList.toggle("sim-show", on);
+  $("#simHud").hidden = !on;
   if (on) {
     if (!showOthers) setShowOthers(true, true); // 모든 시민 제안 기준이므로 제안도 같이 보여준다
     heatSim = computeHeat(map, buildMods(map, expandAll(proposals()), TYPE_BY_CODE));
-    if (!heatOn) setHeat(true, true);
-    paintHeat(world, map, heatSim, true);
-    const st = simStats(heat, heatSim);
+    if (!heatOn) { simOn = false; setHeat(true, true); simOn = true; }
+    const st = coolStats(map, heat, heatSim);
+    $("#simTitle").textContent = `시민 제안 ${proposals().length}건이 실현되면`;
+    $("#simCaption").hidden = true;
+    $("#simPlay").textContent = "▶ 제안 재생";
+    $("#simPlay").classList.remove("playing");
+    if (quiet) { paintHeat(world, map, heatSim, true); setHud(st); }
+    else {
+      // 지금 모습에서 시작해 2.6초 동안 서서히 식어 가며 숫자도 같이 내려감
+      paintHeat(world, map, heat, true);
+      setHud({ ...st, after: st.before, ha: 0 });
+      stopAnim = animateBlend(world, map, heat, heatSim, 2600, { onFrame: (e) => setHud(st, e) });
+    }
     $("#heatAvg").innerHTML = `${Math.round(baseAvg)} · 제안 영향권 ${st.ha.toFixed(1)}ha <span style="color:#2f9e44">${Math.round(st.before)} → ${Math.round(st.after)}</span>`;
     if (!quiet) toast(proposals().length ? `시민 제안 ${proposals().length}건이 실현되면 영향권 ${st.ha.toFixed(1)}ha가 평균 ${Math.round(st.before)} → ${Math.round(st.after)}로 시원해져요` : "아직 개선 제안이 없어요. 지도를 눌러 첫 제안을 해 보세요", 5000);
   } else {
     heatSim = null;
+    controls.autoRotate = false;
     $("#heatAvg").textContent = Math.round(baseAvg);
     if (heatOn) paintHeat(world, map, heat, true);
   }
@@ -1187,7 +1203,90 @@ function setSim(on, quiet = false) {
   renderReport();
 }
 $("#tool-sim").onclick = () => heat && !simOn && setSim(true);
+
+// 결과 카드 숫자 (e: 0~1 진행률 — 애니메이션 중 '지금'에서 '제안 반영 후'로 내려감)
+// 숫자: 영향권 평균 지수 전→후, 시원해진 면적, 가장 많이 식은 곳의 여름 한낮 표면온도 차(10점 ≈ 1.3°C)
+const DEG_PER_PT = (tempOffset(100) - tempOffset(0)) / 100;
+function setHud(st, e = 1, from = null) {
+  const f = from || { after: st.before, ha: 0, max: 0 };
+  const lerp = (a, b) => a + (b - a) * e;
+  $("#simBefore").textContent = Math.round(st.before);
+  $("#simAfter").textContent = Math.round(lerp(f.after, st.after));
+  $("#simHa").textContent = lerp(f.ha, st.ha).toFixed(1);
+  $("#simDeg").textContent = (lerp(f.max, st.max) * DEG_PER_PT).toFixed(1);
+}
+let stopAnim = null, replaying = false;
+function stopSimFx() {
+  stopAnim?.(); stopAnim = null;
+  if (replaying) endReplay(false);
+}
+
+// ---------------------------------------------------------------- 제안 재생 (타임랩스)
+// 시민 제안이 올라온 순서대로 하나씩 떨어지고, 놓일 때마다 주변이 하늘색으로 퍼지며 식어 간다
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function startReplay() {
+  const list = proposals().slice().sort((a, b) => (a.created_at || "").localeCompare(b.created_at || "") || a.id - b.id);
+  if (!list.length) { toast("아직 개선 제안이 없어요. 지도를 눌러 첫 제안을 해 보세요"); return; }
+  stopAnim?.(); stopAnim = null;
+  replaying = true;
+  const run = (replaying = {}); // 이번 재생 표시 (멈추면 다른 객체로 바뀜)
+  $("#simPlay").textContent = "■ 멈추기";
+  $("#simPlay").classList.add("playing");
+  for (const c of list) { const m = markers.get(c.id); if (m) m.obj.visible = false; }
+  paintHeat(world, map, heat, true);
+  const final = computeHeat(map, buildMods(map, expandAll(list), TYPE_BY_CODE));
+  const region = regionOf(heat, final); // 최종 영향권 고정 → 재생 내내 같은 곳의 평균이 내려감
+  let st0 = coolStats(map, heat, heat, region);
+  setHud(st0, 1);
+  controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
+  const steps = Math.min(list.length, 18), per = Math.ceil(list.length / steps);
+  let prev = heat, shown = 0;
+  for (let k = 0; k < list.length && replaying === run; k += per) {
+    const chunk = list.slice(k, k + per);
+    for (const c of chunk) {
+      const m = markers.get(c.id);
+      if (m) { m.obj.visible = true; m.obj.userData.drop = 25; }
+      const r = (TYPE_BY_CODE[c.type]?.effect?.size || 9) / 2;
+      addRipple(scene, c.x + 0.5, heightAt(map, c.x, c.z), c.z + 0.5, r * 1.6);
+    }
+    shown += chunk.length;
+    const last = chunk[chunk.length - 1];
+    const dt = last.created_at ? new Date(last.created_at) : null;
+    const when = dt ? `${dt.getMonth() + 1}/${dt.getDate()}` : "";
+    $("#simTitle").textContent = `시민 제안 ${shown} / ${list.length}건`;
+    $("#simCaption").hidden = false;
+    $("#simCaption").innerHTML = `<b>${esc(TYPE_BY_CODE[last.type]?.label || last.type)}</b> · ${when} · ${esc((last.text || "").slice(0, 40))}`;
+    await sleep(30);
+    if (replaying !== run) break;
+    const next = computeHeat(map, buildMods(map, expandAll(list.slice(0, shown)), TYPE_BY_CODE));
+    const st = coolStats(map, heat, next, region), from = st0;
+    await new Promise((res) => {
+      stopAnim = animateBlend(world, map, prev, next, 650, { onFrame: (e) => setHud(st, e, from), onDone: res });
+    });
+    prev = next; st0 = st;
+  }
+  if (replaying === run) endReplay(true);
+}
+function endReplay(done) {
+  replaying = false;
+  controls.autoRotate = false;
+  $("#simPlay").classList.remove("playing");
+  $("#simPlay").textContent = "▶ 다시 재생";
+  setShowOthers(true, true); // 숨겨 둔 제안 블록을 원래 규칙대로
+  if (simOn && heatSim) {
+    heatSim = computeHeat(map, buildMods(map, expandAll(proposals()), TYPE_BY_CODE)); // 재생 중 새로 들어온 제안까지
+    paintHeat(world, map, heatSim, true);
+    setHud(coolStats(map, heat, heatSim));
+    $("#simTitle").textContent = `시민 제안 ${proposals().length}건이 실현되면`;
+    if (done) {
+      $("#simCaption").innerHTML = "<b>시민 제안이 모일수록 동네가 시원해져요</b>";
+      toast("모든 시민 제안을 반영했어요", 3000);
+    } else $("#simCaption").hidden = true;
+  }
+}
+$("#simPlay").onclick = () => (replaying ? endReplay(false) : startReplay());
 function onProposalsChanged() {
+  if (replaying) return; // 재생 중에는 끊지 않음 (끝나면 새 제안까지 반영)
   if (simOn) setSim(true, true);
   else renderReport();
 }
