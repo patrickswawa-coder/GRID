@@ -160,7 +160,14 @@ export function computeRoadLines(map) {
       pts = pts.slice(0, k + 1);
     }
     if (pts.length < MIN_LEN) continue;
-    if (pts.reduce((t, p) => t + p.h, 0) / pts.length > 7) continue; // 길이 아니라 넓은 포장 덩어리(나들목·주차장)
+    // 아주 넓은 곳(평균 반폭 7칸 초과)은 곧게 길게 뻗은 큰길(왕복 8차선 등)만 남기고,
+    // 짧거나 구불구불한 넓은 포장 덩어리(나들목·주차장)는 뺀다
+    if (pts.reduce((t, p) => t + p.h, 0) / pts.length > 7) {
+      let len = 0;
+      for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k].x - pts[k - 1].x, pts[k].z - pts[k - 1].z);
+      const span = Math.hypot(pts[pts.length - 1].x - pts[0].x, pts[pts.length - 1].z - pts[0].z);
+      if (len < 15 || len / Math.max(span, 1) > 1.3) continue;
+    }
     pts = chaikin(chaikin(douglasPeucker(pts, DP_TOL)));
     lines.push(pts);
   }
