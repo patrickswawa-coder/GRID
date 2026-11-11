@@ -11,7 +11,7 @@ export const TYPES = [
     desc: "길가에 나무 그늘", effect: { size: 5, green: 0.6 } },
   { code: "pocketpark", ico: "trees", example: "빈 주차장이 늘 뜨거워요", label: "소공원·녹지", icon: "🌿", color: "#37b24d", group: "fix",
     desc: "빈 땅·주차장을 작은 숲으로", effect: { size: 7, green: 1, impCut: 1 } },
-  { code: "shade", ico: "umbrella", example: "신호 기다릴 때 너무 더워요", label: "그늘막", icon: "⛱️", color: "#1c7ed6", group: "fix",
+  { code: "shade", ico: "shade-canopy", example: "신호 기다릴 때 너무 더워요", label: "그늘막", icon: "⛱️", color: "#1c7ed6", group: "fix",
     desc: "횡단보도·정류장 그늘", effect: { size: 5, impCut: 0.5 } },
   { code: "coolfog", ico: "droplets", example: "상가 거리가 한낮에 너무 뜨거워요", label: "쿨링포그", icon: "💧", color: "#15aabf", group: "fix",
     desc: "물 안개로 기온 낮추기", effect: { size: 7, water: 0.5 } },
