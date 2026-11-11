@@ -31,7 +31,7 @@
   </svg>
   <canvas id="view"></canvas>
 
-  <!-- 위: 이름 · 지금 날씨 · 제안 수 · 도움말 -->
+  <!-- 위: 이름 · 지금 날씨 -->
   <header class="bar">
     <div class="title-card">
       <span class="mark" aria-hidden="true">GRID</span>
@@ -39,10 +39,6 @@
         <b>열받을지도<span id="place" class="place">원주시 무실동</span></b>
         <span id="envNow" class="env-now">지금 날씨를 불러오는 중이에요</span>
       </div>
-    </div>
-    <div class="bar-right">
-      <button id="count-btn" class="count" type="button" aria-pressed="false" aria-label="다른 시민 제안 보기" title="다른 시민 제안 보기·숨기기"><svg class="ico"><use href="#i-pin"/></svg><span id="count">0</span></button>
-      <button id="tool-help" class="icon-btn" type="button" aria-label="도움말"><svg class="ico"><use href="#i-help"/></svg></button>
     </div>
   </header>
 
@@ -53,9 +49,11 @@
       <button class="tool" id="tool-heat" data-tip="열이 쌓이는 곳을 색으로 보기" type="button" aria-pressed="false">열섬</button>
       <button class="tool" id="tool-sim" data-tip="시민 제안이 모두 실현되면 얼마나 시원해지는지" type="button" aria-pressed="false">제안 반영 후</button>
     </div>
+    <button id="count-btn" class="dock-btn tool" data-tip="다른 시민들이 남긴 제안을 지도에 보기·숨기기" type="button" aria-pressed="false" aria-label="다른 시민 제안 보기"><span class="ico-wrap"><svg class="ico"><use href="#i-pin"/></svg><b id="count" class="badge">0</b></span><small>다른 제안</small></button>
     <button id="tool-report" class="dock-btn tool" data-tip="날씨·공기, 뜨거운 곳 TOP 3, 제안 통계" type="button" aria-pressed="false"><svg class="ico"><use href="#i-report"/></svg><small>리포트</small></button>
     <button id="tool-gps" class="dock-btn tool" data-tip="지금 내가 있는 곳으로 이동" type="button" hidden><svg class="ico"><use href="#i-locate"/></svg><small>내 위치</small></button>
     <button id="tool-home" class="dock-btn tool" data-tip="처음 보던 위치로 돌아가기" type="button"><svg class="ico"><use href="#i-home"/></svg><small>처음</small></button>
+    <button id="tool-help" class="dock-btn tool" data-tip="사용 방법 다시 보기" type="button" aria-label="도움말"><svg class="ico"><use href="#i-help"/></svg><small>도움말</small></button>
   </nav>
 
   <!-- 동네 환경 리포트 -->
