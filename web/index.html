@@ -115,6 +115,16 @@
       <span class="legend-more" aria-hidden="true">?</span></span>
     <span class="legend-note">주변 50m의 지붕·포장면이 많을수록 높고, 녹지·물이 많을수록 낮아요 (위성 보정).<br>무실동 평균 <b id="heatAvg">-</b>, 가장 높은 곳 <b id="heatTop">-</b></span>
   </button>
+  <!-- '제안 반영 후' 결과 카드 + 제안 재생 -->
+  <section id="simHud" class="sim-hud" hidden aria-live="polite">
+    <div class="sim-top"><b id="simTitle">시민 제안이 실현되면</b><button id="simPlay" class="sim-play" type="button">▶ 제안 재생</button></div>
+    <div class="sim-nums">
+      <div><small>제안 영향권 열섬 지수</small><b><span id="simBefore">-</span><i>→</i><span id="simAfter" class="cool">-</span></b></div>
+      <div><small>시원해진 면적</small><b><span id="simHa">0.0</span><em>ha</em></b></div>
+      <div><small>가장 많이 식은 곳</small><b class="cool">−<span id="simDeg">0.0</span><em>°C</em></b></div>
+    </div>
+    <div id="simCaption" class="sim-caption" hidden></div>
+  </section>
   <div id="offline" class="offline" hidden>서버와 연결이 끊겼어요. 다시 시도하는 중…</div>
 
   <div id="loading" class="loading"><div class="spinner"></div><p>무실동을 블록으로 쌓는 중…</p></div>
