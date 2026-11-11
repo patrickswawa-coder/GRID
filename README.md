@@ -1,4 +1,6 @@
-# GRID — 3D 복셀 기반 시민 참여형 공간 민원 플랫폼
+# 열받을지도 — 내 골목 열섬을 보고, 시민이 직접 식히는 3D 지도
+
+팀 GRID (2026 동북권 개발자 대상 오픈소스 아이디어 경진대회 7팀) · 3D 복셀 기반 시민 참여형 공간 민원 플랫폼
 
 > **11/09 변경 정리:** [docs/CHANGES_1109.md](docs/CHANGES_1109.md) · 시민 화면 https://grid-team7.duckdns.org/ · 관리자 https://grid-team7.duckdns.org/admin/ · QR 포스터 [docs/qr/](docs/qr/)
 
