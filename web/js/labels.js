@@ -74,7 +74,8 @@ export async function loadLabels(url, refY = 160) {
 
   const v = new THREE.Vector3();
   let last = 0;
-  function update(camera, viewH, viewW, force = false) {
+  // avoid: 화면에서 비워 둘 사각형들 [x0, y0, x1, y1] (예: 지금 고른 곳의 핀) — 겹치는 이름표는 숨긴다
+  function update(camera, viewH, viewW, force = false, avoid = []) {
     const now = performance.now();
     if (!force && now - last < 150) return;
     last = now;
@@ -82,7 +83,7 @@ export async function loadLabels(url, refY = 160) {
     const y = Math.max(camera.position.y, 1);
     const zoom = refY / y; // 1 = 처음 위치, 클수록 가까이
     const maxN = Math.round(Math.min(80, BASE_N * Math.pow(zoom, 1.4)));
-    const taken = [];
+    const taken = [...avoid];
     let n = 0;
     for (const s of items) {
       const d = s.userData;

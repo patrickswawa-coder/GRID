@@ -480,12 +480,14 @@ body.spot-open .toast { bottom: calc(var(--safe-b) + 250px); }
   .admin-btn .ico { width: 18px; height: 18px; }
   /* 제안 창·상세 창: 왼쪽 패널 */
   .sheet {
-    left: var(--gap); right: auto; top: 124px; bottom: var(--gap); width: 400px; max-width: none; max-height: none; margin: 0;
+    left: var(--gap); right: auto; top: 124px; bottom: auto; width: 400px; max-width: none; max-height: calc(100vh - 124px - var(--gap)); margin: 0;
     border-radius: 20px; box-shadow: var(--shadow), 0 12px 40px rgba(23, 50, 74, .18);
     transform: translateX(calc(-100% - 24px));
   }
   .sheet.open, .sheet.open.peek { transform: none; overflow-y: auto; }
   .sheet .grabber, .sheet .peek-hint { display: none !important; }
+  /* 등록 버튼은 패널 아래에 늘 보이게 (화면이 낮은 노트북) */
+  #sheet .actions { position: sticky; bottom: calc(-16px - var(--safe-b)); margin: 10px -16px -16px; padding: 10px 16px 16px; background: var(--surface); border-top: 1px solid var(--line); z-index: 1; }
   .sheet-top { cursor: default; }
   body.sheet-open .dock { display: flex; }
   body.sheet-open .toast { bottom: calc(var(--safe-b) + var(--gap) + var(--dock-h) + 10px); left: calc(50% + 206px); }
