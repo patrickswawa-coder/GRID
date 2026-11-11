@@ -219,6 +219,8 @@ body.sheet-open .probe, body.sheet-open .crosshair { display: none; }
 .effect-info { font-size: 13.5px; line-height: 1.5; background: var(--cool-tint); color: var(--cool-ink); border-radius: 12px; padding: 9px 12px; margin-bottom: 10px; }
 .effect-info:empty { display: none; }
 .effect-info b { font-size: 15px; }
+.effect-info small { display: inline-block; margin-top: 2px; }
+.effect-info small b { font-size: inherit; }
 .effect-info.warn { background: #fff4e6; color: #b5450b; }
 
 .shape-box { margin: -4px 0 12px; }
@@ -478,6 +480,15 @@ body.spot-open .toast { bottom: calc(var(--safe-b) + 250px); }
   }
   .admin-btn:hover { color: var(--cool-ink); }
   .admin-btn .ico { width: 18px; height: 18px; }
+  /* 리포트: 화면 전체 높이 서랍 대신 떠 있는 패널 — 위 '지자체 대시보드' 버튼과 아래 도구 막대를 가리지 않는다 */
+  .report {
+    top: calc(var(--safe-t) + var(--gap) + 46px + 10px); right: var(--gap);
+    bottom: calc(var(--safe-b) + var(--gap) + var(--dock-h) + 10px);
+    width: 380px; border-radius: 20px; padding: 16px 18px 20px;
+    box-shadow: var(--shadow), 0 12px 40px rgba(23, 50, 74, .18);
+    transform: translateX(calc(100% + 24px));
+  }
+  .report.open { transform: none; }
   /* 제안 창·상세 창: 왼쪽 패널 */
   .sheet {
     left: var(--gap); right: auto; top: 124px; bottom: auto; width: 400px; max-width: none; max-height: calc(100vh - 124px - var(--gap)); margin: 0;

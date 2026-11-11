@@ -398,7 +398,8 @@ function loop() {
       obj.position.y = obj.userData.baseY + obj.userData.drop;
     }
   }
-  if (labels) labels.update(camera, innerHeight, innerWidth, false, pinAvoid());
+  declutterIcons();
+  if (labels) labels.update(camera, innerHeight, innerWidth, false, iconRects.length ? [...pinAvoid(), ...iconRects] : pinAvoid());
   if (spot) updatePin();
   if (!drawing) syncDrawControls();
   updateProbe();
@@ -530,6 +531,37 @@ async function syncState() {
   return changed;
 }
 
+// 제안이 많으면 떠 있는 아이콘끼리 겹쳐 지저분해진다 → 화면에서 가까운 아이콘은 하나만 남긴다.
+// 바닥의 모형(나무·그늘막 블록)은 그대로 보이므로 '얼마나 몰렸는지'는 지도에서 계속 보인다.
+// 남기는 순서: 열어 둔 제안 > 내 제안 > 공감 많은 것 > 최근 것. 확대하면 숨었던 아이콘이 다시 나온다.
+let declutterAt = 0, iconRects = [];
+const iconV = new THREE.Vector3();
+function declutterIcons(force = false) {
+  const now = performance.now();
+  if (!force && now - declutterAt < 120) return;
+  declutterAt = now;
+  const list = [];
+  for (const m of markers.values()) {
+    const sp = m.obj.userData.sprite;
+    if (!sp) continue;
+    if (!m.obj.visible) { sp.visible = true; continue; }
+    sp.getWorldPosition(iconV).project(camera);
+    if (iconV.z > 1) { sp.visible = false; continue; }
+    const pr = (m.data.id === detailId ? 1e9 : 0) + (mine.has(m.data.id) ? 1e8 : 0) + (m.data.likes || 0) * 1e5 + m.data.id;
+    list.push({ sp, tag: m.obj.userData.mineTag, x: (iconV.x + 1) / 2 * innerWidth, y: (1 - iconV.y) / 2 * innerHeight, pr });
+  }
+  list.sort((a, b) => b.pr - a.pr);
+  const R = 0.0225 * innerHeight, gap = Math.max(28, R * 2); // 아이콘 지름 ≈ 화면 높이의 4.5%
+  const kept = [];
+  for (const it of list) {
+    const show = !kept.some((k) => Math.abs(k.x - it.x) < gap && Math.abs(k.y - it.y) < gap);
+    it.sp.visible = show;
+    if (it.tag) it.tag.visible = show;
+    if (show) kept.push(it);
+  }
+  iconRects = kept.map((k) => [k.x - R, k.y - R, k.x + R, k.y + R]); // 장소 이름표가 아이콘 밑에 깔리지 않게
+}
+
 // 줄·네모 제안은 칸마다 모형을 놓고 하나로 묶는다 (아이콘은 첫 칸에만)
 function makeGroupMarker(c, ghostMode = false) {
   const cells = expandCells(c);
@@ -594,7 +626,7 @@ function onTap(px, py) {
   let best = null, bestD = 28;
   const v = new THREE.Vector3();
   for (const { obj, data } of markers.values()) {
-    if (!obj.visible) continue;
+    if (!obj.visible || !obj.userData.sprite.visible) continue; // 겹쳐서 숨긴 아이콘은 누를 수 없음 (확대하면 나옴)
     obj.userData.sprite.getWorldPosition(v).project(camera);
     if (v.z > 1) continue;
     const sx = (v.x + 1) / 2 * innerWidth, sy = (1 - v.y) / 2 * innerHeight;
@@ -897,7 +929,18 @@ function showEffect(t) {
     : before < 45 ? "<br><small>이곳은 이미 시원한 편이에요. 빨간 곳에 놓으면 효과가 커요</small>"
     : before >= 99 ? "<br><small>지수가 가장 높은 구간이라 블록 하나로는 숫자가 그대로예요. 이런 곳일수록 제안이 여러 개 모여야 해요</small>"
     : "";
-  el.innerHTML = `<b class="ei-t">${t.label}</b> ${t.desc} · 약 ${m}m×${m}m<br>놓으면 이 주변 열섬 지수 <b>${Math.round(before)} → ${Math.round(after)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})${hint}`;
+  // 숫자만으로는 '−2'가 얼마나인지 감이 안 오므로: 표면온도로 바꾼 값 + 같은 제안이 주변에 모였을 때(십자 5곳)
+  const dT = (before - after) * DEG_PER_PT;
+  let together = "";
+  if (d > 0 && before < 99) {
+    const S = t.effect.size, around = [[0, 0], [S, 0], [-S, 0], [0, S], [0, -S]]
+      .map(([dx, dz]) => ({ type: t.code, x: x + dx, z: z + dz }))
+      .filter((p) => p.x >= 0 && p.z >= 0 && p.x < map.meta.width && p.z < map.meta.depth && (!t.roofOnly || heightAt(map, p.x, p.z) > 0));
+    const a5 = Math.round(scoreAt(map, x, z, buildMods(map, around, TYPE_BY_CODE)));
+    if (around.length > 1 && Math.round(before) - a5 > d) together = ` 같은 제안 ${around.length}개가 이 주변에 모이면 <b>${Math.round(before)} → ${a5}</b>`;
+  }
+  const more = d > 0 ? `<br><small>여름 한낮 땅 표면이 약 ${dT.toFixed(1)}°C 낮아져요.${together}</small>` : "";
+  el.innerHTML = `<b class="ei-t">${t.label}</b> ${t.desc} · 약 ${m}m×${m}m<br>놓으면 이 주변 열섬 지수 <b>${Math.round(before)} → ${Math.round(after)}</b> (${d > 0 ? "−" + d : "변화 거의 없음"})${more}${hint}`;
   const sz = t.effect.size;
   footprint.scale.set(sz, 1, sz);
   footprint.position.set(x + 0.5, (t.roofOnly ? heightAt(map, x, z) : 0) + 0.06, z + 0.5);
@@ -1526,9 +1569,11 @@ function renderReport() {
   });
 }
 
-// 구역 코드(H1) 대신 그 구역 안 가장 중요한 이름표로 부르기
+// 구역 코드(H13) 대신 사람이 알아보는 이름: 가까우면 'X 주변', 멀면 'X 남쪽 300m'
+// backend/heatmodel.py zone_name() 과 같은 규칙 (둘을 같이 고칠 것)
+const DIRS = ["북", "북동", "동", "남동", "남", "남서", "서", "북서"];
 function nearestLabel(zone) {
-  const s = map.meta.zone_size || 40;
+  const s = map.meta.zone_size || 40, cell = map.meta.cell || 5;
   const zx = zone.charCodeAt(0) - 65, zz = parseInt(zone.slice(1), 10) - 1;
   const cx = zx * s + s / 2, cz = zz * s + s / 2;
   let best = null, bd = Infinity;
@@ -1536,7 +1581,11 @@ function nearestLabel(zone) {
     const d = Math.hypot(l.x - cx, l.z - cz);
     if (d < bd) { bd = d; best = l; }
   }
-  return best && bd < s * 1.2 ? `${best.name} 주변` : `구역 ${zone}`;
+  if (!best) return `구역 ${zone}`;
+  if (bd < s * 0.5) return `${best.name} 주변`;
+  const ang = ((Math.atan2(cx - best.x, best.z - cz) * 180) / Math.PI + 360) % 360;
+  const m = Math.max(50, Math.round((bd * cell) / 50) * 50);
+  return `${best.name} ${DIRS[Math.floor((ang + 22.5) / 45) % 8]}쪽 ${m}m`;
 }
 
 function heatHTML(x, z) {

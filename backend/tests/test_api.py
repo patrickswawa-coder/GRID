@@ -302,3 +302,14 @@ def test_moderation_ai(monkeypatch):
     main.ai_classify(d["id"], "tree", d["text"], False)
     rows = {x["id"]: x for x in client.get("/api/complaints?all=1").json()}
     assert rows[c["id"]]["moderation"] == "ok" and rows[d["id"]]["moderation"] is None
+
+
+def test_zone_names_are_readable():
+    """구역 코드(H13) 대신 이름표 기준 이름 — 이름표가 먼 구역도 '구역 H13'으로 나오지 않는다."""
+    import re
+    import heatmodel
+    for code in ("H13", "B2", "L4"):
+        name = heatmodel.zone_label(code)
+        assert not name.startswith("구역 "), name
+        assert name.endswith(" 주변") or re.search(r"[동서남북]쪽 \d+m$", name), name
+    assert heatmodel.zone_label("??") == "??"  # 잘못된 코드는 그대로

@@ -214,9 +214,14 @@ function renderTop5(pr) {
     const want = z.top_type ? tLabel(z.top_type) : "아직 제안 없음";
     return `<li data-zone="${esc(z.zone)}" class="${state.hot === z.zone ? "on" : ""}">
       <span class="no">${z.rank}</span><span class="nm">${esc(z.name)}</span>
-      <span class="hv"><b style="background:${heatCss(z.heat)}">${Math.round(z.heat)}</b><span>${z.delta > 0 ? `실현 시 −${z.delta.toFixed(1)}` : "열섬 지수"}</span></span>
-      <span class="meta">제안 <b>${z.proposals}</b> · 신고 <b>${z.reports}</b> · 공감 <b>${z.likes}</b> · ${esc(want)}</span></li>`;
+      <span class="hv"><b style="background:${heatCss(z.heat)}">${Math.round(z.heat)}</b><span>열섬 지수</span></span>
+      <span class="meta">제안 <b>${z.proposals}</b> · 신고 <b>${z.reports}</b> · 공감 <b>${z.likes}</b> · ${esc(want)}</span>
+      <span class="eff">${z.delta > 0 ? `제안이 모두 실현되면 <b>${fmtDrop(z.heat, z.heat_after)}</b>` : "아직 효과를 계산할 개선 제안이 없어요"}</span></li>`;
   }).join("");
+}
+// 반올림하면 같아지는 작은 변화(93.3 → 92.6)는 소수 한 자리로 보여 '93 → 93'처럼 보이지 않게
+function fmtDrop(a, b) {
+  return Math.round(a) !== Math.round(b) ? `${Math.round(a)} → ${Math.round(b)}` : `${a.toFixed(1)} → ${b.toFixed(1)}`;
 }
 function setHot(zone) {
   if (state.hot === zone) return;
@@ -268,12 +273,13 @@ function drawZoneMap(pr, complaints) {
   }
   // 주요 장소 이름 (방향을 잡기 쉽게)
   g.font = `600 11.5px ${FONT}`; g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
-  const used = [];
+  // 우선 구역 순위 배지(왼쪽 위 20px) 자리는 미리 비워 둔다 → 이름이 배지 밑에 깔리지 않게
+  const used = pr.filter((q) => q.rank <= 5).map((z) => { const [x, y] = zxy(z); return { x: x + 9, y: y + 9, tw: 12, th: 12 }; });
   for (const l of state.labels) {
-    const tw = g.measureText(l.name).width / 2 + 4;
+    const tw = g.measureText(l.name).width / 2 + 4, th = 9;
     const x = Math.max(tw, Math.min(W - tw, (l.x + 0.5) * sc)), y = Math.max(12, Math.min(H - 10, (l.z + 0.5) * sc));
-    if (used.some((u) => Math.abs(u.x - x) < u.tw + tw && Math.abs(u.y - y) < 16)) continue; // 겹치면 덜 중요한 이름은 생략
-    used.push({ x, y, tw });
+    if (used.some((u) => Math.abs(u.x - x) < u.tw + tw && Math.abs(u.y - y) < u.th + th)) continue; // 겹치면 덜 중요한 이름은 생략
+    used.push({ x, y, tw, th });
     g.lineWidth = 3.5; g.strokeStyle = "rgba(255,255,255,.92)"; g.strokeText(l.name, x, y);
     g.fillStyle = C.ink; g.fillText(l.name, x, y);
   }
@@ -334,10 +340,8 @@ function drawQuadrant(pr) {
   if ($("quad").querySelector(".chart-empty")) $("quad").innerHTML = "";
   const ch = chart("quad"); if (!ch) return;
   const pt = (z) => ({ value: [z.heat, z.demand], z });
-  // 이름표가 서로 겹치지 않게: 오른쪽 끝 점들은 위·아래로, 나머지는 왼쪽·오른쪽으로 번갈아
-  const top = q.filter((z) => z.rank <= 5).sort((a, b) => a.heat - b.heat);
-  let nEdge = 0, nMid = 0;
-  const topPts = top.map((z) => ({ ...pt(z), label: { position: z.heat > 78 ? (nEdge++ % 2 ? "bottom" : "top") : (nMid++ % 2 ? "right" : "left") } }));
+  // 우선 구역 5곳은 점 안에 순위 숫자만 (이름표는 점이 가까우면 서로 겹침 → 이름은 왼쪽 '우선 개선 구역' 목록·말풍선에서)
+  const topPts = q.filter((z) => z.rank <= 5).sort((a, b) => b.rank - a.rank).map(pt);
   ch.setOption({
     animation: false, textStyle: { fontFamily: FONT },
     grid: { left: 44, right: 44, top: 16, bottom: 44 },
@@ -347,9 +351,9 @@ function drawQuadrant(pr) {
     series: [
       { type: "scatter", symbolSize: 9, itemStyle: { color: "#9db0be", opacity: 0.75, borderColor: "#fff", borderWidth: 1 }, data: q.filter((z) => z.rank > 5).map(pt),
         markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: "#b5c2cc", type: [4, 4], width: 1 }, data: [{ xAxis: 70 }] } },
-      { type: "scatter", symbolSize: 14, itemStyle: { color: C.heat, borderColor: "#fff", borderWidth: 2 }, data: topPts,
-        label: { show: true, formatter: (p) => `${p.data.z.rank}. ${p.data.z.name.replace(" 주변", "")}`, distance: 7, color: C.ink, fontFamily: FONT, fontSize: 12, fontWeight: 600,
-          textBorderColor: "#fff", textBorderWidth: 3 } },
+      { type: "scatter", symbolSize: 22, itemStyle: { color: C.heat, borderColor: "#fff", borderWidth: 2, shadowBlur: 4, shadowColor: "rgba(23,50,74,.25)" }, data: topPts,
+        label: { show: true, position: "inside", formatter: (p) => String(p.data.z.rank), color: "#fff", fontFamily: FONT, fontSize: 12, fontWeight: 800 },
+        emphasis: { scale: 1.15 } },
     ],
   }, true);
 }
@@ -541,11 +545,17 @@ async function loadAI() {
   const [p, s] = await Promise.all([safe(get("/api/ai/policy")), safe(get("/api/ai/summary"))]);
   if (p) {
     // AI가 # 머리글을 쓰면 너무 커지므로 굵은 글씨로 낮추고, **굵게**만 허용 (나머지는 이스케이프)
-    $("policy").innerHTML = esc(p.text.replace(/^#{1,6}\s*(.+?)\s*#*$/gm, "**$1**")).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    $("policy").innerHTML = esc(p.text.replace(/^#{1,6}\s*(.+?)\s*#*$/gm, "**$1**").replace(/^\s*[-*]\s+/gm, "· "))
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
     $("policy-cap").textContent = p.ai ? "AI 분석 · Amazon Bedrock" : "규칙 기반";
   } else { $("policy").textContent = "정책 제안을 불러오지 못했어요."; aiAt = 0; }
   if (s) {
-    $("summary").textContent = s.summary;
+    // 요약은 평문 3~4문장: AI가 제목(#)·굵게(**)·목록 기호를 붙여도 기호가 화면에 보이지 않게 걷어낸다
+    $("summary").textContent = s.summary
+      .replace(/^\s*#{1,6}\s.*$/gm, "")
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/^\s*[-*•]\s+/gm, "")
+      .replace(/\n{2,}/g, "\n").trim();
     $("summary-cap").textContent = s.ai ? "AI" : "통계 기반";
   } else { $("summary").textContent = "요약을 불러오지 못했어요."; aiAt = 0; }
 }
@@ -618,8 +628,9 @@ async function initLst() {
   $("lst-r").textContent = d.r100.toFixed(2);
   $("lst-k").textContent = `${d.slope10.toFixed(1)}°C`;
   $("lst-n").textContent = `${d.scenes.length}장면`;
-  $("lst-dates").textContent = `Landsat 여름 장면 (${d.scenes[0].slice(0, 4)}~${d.scenes.at(-1).slice(0, 4)})`;
-  $("lst-dates").title = d.scenes.join(", ");
+  const sc = [...d.scenes].sort(); // 파일 속 장면 순서는 받은 순서라 날짜순이 아닐 수 있음
+  $("lst-dates").textContent = `Landsat 여름 장면 (${sc[0].slice(0, 4)}~${sc.at(-1).slice(0, 4)})`;
+  $("lst-dates").title = sc.join(", ");
   $("lst-src").textContent = "Landsat 8·9";
 
   if (!d.points?.length) emptyChart("lst-scatter", "구역별 비교 그림은 위성 자료를 받으면 표시돼요.<br>(서버에서 data/export_lst.py 실행)");

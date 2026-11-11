@@ -542,12 +542,14 @@ def ai_summary():
         rows = conn.execute(f"SELECT zone, type, text, likes FROM complaints WHERE {PUBLIC} ORDER BY id DESC LIMIT 80").fetchall()
     if not rows:
         return {"summary": "아직 접수된 민원이 없습니다.", "generated_at": now_kst(), "ai": False}
-    lines = [f"- [{r['zone']}] {TYPE_NAMES.get(r['type'], r['type'])}: {r['text']} (공감 {r['likes']})" for r in rows]
+    lines = [f"- [{heatmodel.zone_label(r['zone'])}] {TYPE_NAMES.get(r['type'], r['type'])}: {r['text']} (공감 {r['likes']})" for r in rows]
     data = None
     if AI_ENABLED:
         prompt = (
             "다음은 원주시 무실동 시민들이 3D 열섬 지도 위에 남긴 최근 환경 개선 제안과 불편 신고야. 공무원에게 보고하듯 "
-            "한국어로 3~4문장 요약해 줘. 제안이 몰린 구역, 가장 많은 요구(가로수·그늘막 등), 폭염·대기 관점에서 우선 검토할 항목을 포함해.\n\n"
+            "한국어로 3~4문장 요약해 줘. 제안이 몰린 구역, 가장 많은 요구(가로수·그늘막 등), 폭염·대기 관점에서 우선 검토할 항목을 포함해. "
+            "규칙: ① 구역은 대괄호 안 이름(예: '원주우편집중국 주변') 그대로 쓰고 영문·숫자 구역 코드는 쓰지 마. "
+            "② 제목, # 머리글, ** 굵은 글씨, 목록 기호 없이 평범한 문장으로만 써. ③ 숫자는 아래 자료로 셀 수 있는 것만 써.\n\n"
             + "\n".join(lines)
         )
         try:
@@ -570,7 +572,7 @@ def _rule_summary() -> str:
              f"가장 많은 요청은 '{TYPE_NAMES.get(top_type[0], top_type[0])}'({top_type[1]}건)입니다."]
     if s["top_zones"]:
         z = s["top_zones"][0]
-        parts.append(f"민원이 가장 몰린 구역은 {z['zone']}({z['count']}건)이며 주로 "
+        parts.append(f"민원이 가장 몰린 구역은 {heatmodel.zone_label(z['zone'])}({z['count']}건)이며 주로 "
                      f"'{TYPE_NAMES.get(z['top_type'], z['top_type'])}' 요청입니다.")
     return " ".join(parts)
 
