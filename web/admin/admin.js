@@ -13,7 +13,7 @@ const HEAT_STOPS = [[0, [47, 158, 68]], [35, [148, 216, 45]], [55, [252, 216, 60
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const tLabel = (c) => { const t = TYPE_BY_CODE[c]; return t ? `${t.icon} ${t.label}` : c; };
+const tLabel = (c) => TYPE_BY_CODE[c]?.label || c;
 
 function heatRGB(v) {
   v = Math.max(0, Math.min(100, v));
@@ -371,7 +371,7 @@ $("schips").addEventListener("click", (e) => {
 });
 
 function renderChips() {
-  $("chips").innerHTML = TYPES.map((t) => `<button type="button" class="chip" data-t="${t.code}" aria-pressed="${state.filter.has(t.code)}">${t.icon} ${esc(t.label)}</button>`).join("");
+  $("chips").innerHTML = TYPES.map((t) => `<button type="button" class="chip" data-t="${t.code}" aria-pressed="${state.filter.has(t.code)}"><i class="cdot" style="background:${t.color}"></i>${esc(t.label)}</button>`).join("");
 }
 $("chips").addEventListener("click", (e) => {
   const b = e.target.closest(".chip"); if (!b) return;
@@ -424,25 +424,27 @@ function renderComplaints() {
   $("topzones").innerHTML = `<tr><th>구역</th><th class="num">건수</th><th class="num">공감</th><th>주요 요청</th></tr>` +
     zrows.map((r) => `<tr><td>${esc((zn[r.z] || r.z).replace(" 주변", ""))}</td><td class="num">${r.n}</td><td class="num">${r.likes}</td><td>${esc(tLabel(r.top))}</td></tr>`).join("");
 
-  const head = ["번호", "유형", "구역", "내용", "공감", "AI 긴급도", "상태", "접수 시각", "답변"];
-  const sorted = [...df].sort((a, b) => b.likes - a.likes || b.id - a.id);
-  const csvRows = sorted.map((c) => [c.id, tLabel(c.type), zn[c.zone] || c.zone, c.text, c.likes, URGENCY[c.ai_urgency] || "", STATUS[c.status] || c.status, c.created_at.replace("T", " ").slice(0, 19), c.reply || ""]);
+  const head = ["번호", "AI 긴급도", "공감", "유형", "구역", "내용", "상태", "접수 시각", "답변"];
+  // 정렬: AI 긴급도 높은 순 → 같으면 공감 많은 순 → 같으면 최근 순 (긴급도 판정 전·AI 미연결은 맨 아래)
+  const sorted = [...df].sort((a, b) => (b.ai_urgency || 0) - (a.ai_urgency || 0) || b.likes - a.likes || b.id - a.id);
+  const csvRows = sorted.map((c) => [c.id, URGENCY[c.ai_urgency] || "", c.likes, tLabel(c.type), zn[c.zone] || c.zone, c.text, STATUS[c.status] || c.status, c.created_at.replace("T", " ").slice(0, 19), c.reply || ""]);
   const adm = canAdmin();
   const opts = (cur) => Object.entries(STATUS).map(([k, l]) => `<option value="${k}"${k === cur ? " selected" : ""}>${l}</option>`).join("");
   const modHtml = (c) => isPublic(c) ? "" : `<span class="mod">${MOD[c.moderation] || c.moderation}${c.mod_reason ? ` · ${esc(c.mod_reason)}` : ""}</span>`;
-  const rowHtml = (c) => `<tr data-id="${c.id}"${isPublic(c) ? "" : ` class="is-hidden"`}><td class="num">${c.id}</td><td>${esc(tLabel(c.type))}</td><td>${esc((zn[c.zone] || c.zone).replace(" 주변", ""))}</td>
-    <td class="wrap">${modHtml(c)}${esc(c.text)}${c.reply ? `<span class="reply">${esc(c.reply)}</span>` : ""}</td><td class="num">${c.likes}</td>
-    <td>${URGENCY[c.ai_urgency] ? `<span class="urg u${c.ai_urgency}">${URGENCY[c.ai_urgency]}</span>` : ""}</td>
+  const rowHtml = (c) => `<tr data-id="${c.id}"${isPublic(c) ? "" : ` class="is-hidden"`}><td class="num">${c.id}</td>
+    <td>${URGENCY[c.ai_urgency] ? `<span class="urg u${c.ai_urgency}">${URGENCY[c.ai_urgency]}</span>` : `<span class="urg">판정 전</span>`}</td><td class="num">${c.likes}</td>
+    <td>${esc(tLabel(c.type))}</td><td>${esc((zn[c.zone] || c.zone).replace(" 주변", ""))}</td>
+    <td class="wrap">${modHtml(c)}${esc(c.text)}${c.reply ? `<span class="reply">${esc(c.reply)}</span>` : ""}</td>
     <td>${adm ? `<select class="st" aria-label="처리 상태">${opts(c.status)}</select>` : `<span class="badge ${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>`}</td>
     <td>${esc(c.created_at.replace("T", " ").slice(5, 16))}</td>
     <td>${adm ? `<button class="mini" data-a="reply" type="button">답변</button>${isPublic(c)
       ? `<button class="mini" data-a="hide" type="button" title="시민 지도·통계에서 숨겨요 (삭제 아님)">숨기기</button>`
       : `<button class="mini ok" data-a="show" type="button" title="문제없으면 다시 공개해요">보이기</button>`}<button class="mini del" data-a="del" type="button">삭제</button>` : ""}</td></tr>`;
-  const shown = ["번호", "유형", "구역", "내용", "공감", "AI 긴급도", "상태", "접수", adm ? "관리" : ""];
-  $("list").innerHTML = `<tr>${shown.map((h, i) => `<th class="${i === 0 || i === 4 ? "num" : ""}">${h}</th>`).join("")}</tr>` + sorted.slice(0, 300).map(rowHtml).join("");
+  const shown = ["번호", "AI 긴급도", "공감", "유형", "구역", "내용", "상태", "접수", adm ? "관리" : ""];
+  $("list").innerHTML = `<tr>${shown.map((h, i) => `<th class="${[i === 0 || i === 2 ? "num" : "", i === 1 ? "sorted" : ""].join(" ").trim()}"${i === 1 ? ` aria-sort="descending"` : ""}>${h}</th>`).join("")}</tr>` + sorted.slice(0, 300).map(rowHtml).join("");
   const rows = csvRows;
   $("dl-list").onclick = () => download(`grid_민원_${stamp()}.csv`, csv([head, ...rows]));
-  $("updated").textContent = `공감 많은 순 · 마지막 갱신 ${new Date().toLocaleTimeString("ko-KR")}` + (rows.length > 300 ? ` · 화면에는 300건까지, CSV는 전체 ${rows.length}건` : "");
+  $("updated").textContent = `AI 긴급도 높은 순, 같으면 공감 많은 순 · 마지막 갱신 ${new Date().toLocaleTimeString("ko-KR")}` + (rows.length > 300 ? ` · 화면에는 300건까지, CSV는 전체 ${rows.length}건` : "");
 }
 
 // ---------------------------------------------------------------- AI 텍스트 (느리므로 따로, 5분 캐시)

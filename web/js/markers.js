@@ -1,6 +1,7 @@
 // 민원 유형별 작은 복셀 모형 + 머리 위 아이콘
 import * as THREE from "three";
 import { TYPE_BY_CODE } from "./types.js";
+import { iconImage } from "./icons.js";
 
 const box = new THREE.BoxGeometry(1, 1, 1);
 const matCache = new Map();
@@ -93,26 +94,56 @@ const MODELS = {
 };
 
 const iconCache = new Map();
-function iconTexture(icon, color) {
-  if (iconCache.has(icon)) return iconCache.get(icon);
+// 머리 위 동그라미 아이콘: 흰 바탕 + 유형 색 테두리 + 선 아이콘(Lucide). 아이콘 그림은 불러오는 대로 다시 그린다
+function iconTexture(name, color) {
+  const key = name + color;
+  if (iconCache.has(key)) return iconCache.get(key);
   const s = 256, cv = document.createElement("canvas"); // 고해상도 화면용 2배
   cv.width = cv.height = s;
   const ctx = cv.getContext("2d");
-  ctx.fillStyle = "#fff";
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 20;
-  ctx.beginPath();
-  ctx.arc(s / 2, s / 2, s / 2 - 16, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.font = "128px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(icon, s / 2, s / 2 + 8);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
-  iconCache.set(icon, t);
+  const draw = () => {
+    ctx.clearRect(0, 0, s, s);
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    ctx.arc(s / 2, s / 2, s / 2 - 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    const img = iconImage(name, color);
+    if (img.complete && img.naturalWidth) ctx.drawImage(img, s * 0.24, s * 0.24, s * 0.52, s * 0.52);
+    else img.addEventListener("load", draw, { once: true });
+    t.needsUpdate = true;
+  };
+  draw();
+  iconCache.set(key, t);
   return t;
+}
+
+// '내 제안' 이름표 — 내가 이 기기에서 올린 제안 아이콘 위에 붙는다 (아이콘과 같이 화면 크기 고정)
+let mineTex = null;
+export function makeMineTag() {
+  if (!mineTex) {
+    const K = 2, w = 112 * K, h = 40 * K, cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = "#17324a";
+    ctx.beginPath(); ctx.roundRect(K, K, w - 2 * K, h - 2 * K, h / 2); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = `700 ${21 * K}px "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("내 제안", w / 2, h / 2 + K);
+    mineTex = new THREE.CanvasTexture(cv);
+    mineTex.colorSpace = THREE.SRGBColorSpace;
+  }
+  const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: mineTex, depthTest: false, transparent: true }));
+  tag.scale.set(0.056, 0.02, 1);
+  tag.center.set(0.5, -1.3); // 아이콘(지름 0.045) 바로 위에 뜨도록 기준점을 아래로
+  tag.material.sizeAttenuation = false;
+  tag.renderOrder = 11;
+  return tag;
 }
 
 /** 민원 마커 생성. ghost=true 는 등록 전 미리보기(반투명) */
@@ -121,7 +152,7 @@ export function makeMarker(type, { ghost = false } = {}) {
   const g = new THREE.Group();
   (MODELS[type] || MODELS.other)(g, ghost);
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: iconTexture(t.icon, t.color), depthTest: false, transparent: true })
+    new THREE.SpriteMaterial({ map: iconTexture(t.ico || "circle-alert", t.color), depthTest: false, transparent: true })
   );
   sprite.position.y = 3.2;
   sprite.scale.set(0.045, 0.045, 1);
