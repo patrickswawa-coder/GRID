@@ -65,6 +65,55 @@ function sortLabel() {
   return state.sort.key === "urgency" && !up ? "AI 긴급도 높은 순, 같으면 공감 많은 순" : `${word}, 같으면 긴급도·공감 순`;
 }
 
+// ---------------------------------------------------------------- 로그인·확인·입력 창, 알림 (브라우저 기본 prompt/alert/confirm 대신)
+// ask({ title, message, input: "password"|"text"|"textarea"|null, value, ok, danger, icon, validate })
+//   → 입력값(문자열) / 확인만이면 true / 취소면 null. validate(v) 가 문자열을 돌려주면 창을 닫지 않고 그 오류를 보여준다.
+const ICO = (id) => `<svg class="ico"><use href="#i-${id}"/></svg>`;
+function ask({ title, message = "", input = null, value = "", ok = "확인", danger = false, icon = "lock", validate = null, placeholder = "" }) {
+  const dlg = $("ask"), inp = $("ask-input"), ta = $("ask-text"), err = $("ask-err"), okb = $("ask-ok");
+  $("ask-title").textContent = title;
+  $("ask-msg").textContent = message;
+  $("ask-icon").innerHTML = ICO(icon);
+  $("ask-label").textContent = title;
+  dlg.classList.toggle("is-danger", danger);
+  okb.className = "btn " + (danger ? "danger" : "primary"); okb.textContent = ok; okb.disabled = false;
+  $("ask-field").hidden = !input;
+  inp.hidden = !(input === "password" || input === "text"); ta.hidden = input !== "textarea";
+  const field = input === "textarea" ? ta : inp;
+  if (input === "password" || input === "text") { inp.type = input; inp.autocomplete = input === "password" ? "current-password" : "off"; }
+  field.value = value; field.placeholder = placeholder;
+  err.textContent = ""; dlg.classList.remove("has-err");
+  return new Promise((resolve) => {
+    const done = (v) => { cleanup(); dlg.close(); resolve(v); };
+    const onSubmit = async (e) => {
+      e.preventDefault();
+      const v = input ? field.value : true;
+      if (validate) {
+        okb.disabled = true;
+        const msg = await validate(v).catch(() => "서버에 연결할 수 없어요. 잠시 뒤 다시 시도해 주세요.");
+        okb.disabled = false;
+        if (msg) { err.textContent = msg; dlg.classList.add("has-err"); field.select?.(); return; }
+      }
+      done(v);
+    };
+    const onCancel = (e) => { e?.preventDefault?.(); done(null); };
+    const onInput = () => { err.textContent = ""; dlg.classList.remove("has-err"); };
+    const cleanup = () => { $("ask-form").removeEventListener("submit", onSubmit); $("ask-cancel").removeEventListener("click", onCancel); dlg.removeEventListener("cancel", onCancel); field.removeEventListener("input", onInput); };
+    $("ask-form").addEventListener("submit", onSubmit);
+    $("ask-cancel").addEventListener("click", onCancel);
+    dlg.addEventListener("cancel", onCancel); // Esc
+    field.addEventListener("input", onInput);
+    dlg.showModal();
+    (input ? field : okb).focus();
+  });
+}
+let toastTimer = 0;
+function toast(msg, isErr = false) {
+  const t = $("toast");
+  t.textContent = msg; t.classList.toggle("err", isErr); t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 3200);
+}
+
 // ---------------------------------------------------------------- 관리자 (로그인·상태 변경·삭제)
 const admin = { required: false, token: (() => { try { return sessionStorage.getItem("grid-admin") || ""; } catch { return ""; } })() };
 const canAdmin = () => !admin.required || !!admin.token;
@@ -85,22 +134,31 @@ async function initAdmin() {
   updateAdminUI();
 }
 $("btn-login").onclick = async () => {
-  if (admin.token) return setToken("");
-  const pw = prompt("관리자 비밀번호");
-  if (!pw) return;
-  const r = await fetch(API + "/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) });
-  r.ok ? setToken(pw) : alert("비밀번호가 맞지 않아요.");
+  if (admin.token) { setToken(""); toast("로그아웃했어요"); return; }
+  await login();
+};
+async function login(message = "처리 상태 변경, 답변, 숨기기·삭제는 관리자만 할 수 있어요.") {
+  const pw = await ask({
+    title: "관리자 로그인", message, input: "password", ok: "로그인", icon: "lock", placeholder: "비밀번호",
+    validate: async (v) => {
+      if (!v) return "비밀번호를 입력해 주세요.";
+      const r = await fetch(API + "/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: v }) });
+      return r.ok ? null : "비밀번호가 맞지 않아요.";
+    },
+  });
+  if (pw) { setToken(pw); toast("로그인했어요"); refresh(); }
+  return !!pw;
 };
 async function act(path, method, body) {
   const r = await fetch(API + path, { method, headers: { "Content-Type": "application/json", "X-Admin-Token": admin.token }, body: body ? JSON.stringify(body) : undefined });
-  if (r.status === 401) { setToken(""); alert("관리자 로그인이 필요해요. 위의 '관리자 로그인'을 눌러 주세요."); throw new Error("401"); }
+  if (r.status === 401) { setToken(""); login("로그인이 풀렸어요. 다시 로그인해 주세요."); throw new Error("401"); }
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) { alert(data.detail || "처리하지 못했어요."); throw new Error(String(r.status)); }
+  if (!r.ok) { toast(data.detail || "처리하지 못했어요.", true); throw new Error(String(r.status)); }
   return data;
 }
 $("btn-backup").onclick = async () => {
   const r = await fetch(API + "/api/admin/backup", { headers: { "X-Admin-Token": admin.token } });
-  if (!r.ok) return alert("백업에 실패했어요.");
+  if (!r.ok) return toast("백업에 실패했어요.", true);
   const a = document.createElement("a"); a.href = URL.createObjectURL(await r.blob());
   a.download = `grid-backup-${stamp()}.db`; a.click(); URL.revokeObjectURL(a.href);
 };
@@ -512,12 +570,17 @@ $("list").addEventListener("click", async (e) => {
     if (btn.dataset.a === "hide" || btn.dataset.a === "show") {
       await act(`/api/complaints/${id}`, "PATCH", { moderation: btn.dataset.a === "hide" ? "hidden" : "ok" });
     } else if (btn.dataset.a === "del") {
-      if (!confirm(`#${id} 민원을 삭제할까요?\n"${c?.text ?? ""}"\n삭제하면 되돌릴 수 없어요.`)) return;
+      const yes = await ask({ title: `#${id} 민원을 삭제할까요?`, message: `"${c?.text ?? ""}"\n삭제하면 되돌릴 수 없어요. 잠시 가리려면 '숨기기'를 쓰세요.`,
+        ok: "삭제", danger: true, icon: "trash" });
+      if (!yes) return;
       await act(`/api/complaints/${id}`, "DELETE");
+      toast(`#${id} 민원을 삭제했어요`);
     } else {
-      const r = prompt("시민에게 보여줄 처리 안내 (300자까지, 비우면 삭제)", c?.reply || "");
+      const r = await ask({ title: `#${id} 시민에게 답변`, message: `"${c?.text ?? ""}"\n시민 지도에서 이 제안을 누르면 보여요. 비우고 저장하면 답변을 지워요.`,
+        input: "textarea", value: c?.reply || "", ok: "저장", icon: "reply", placeholder: "예: 내년도 사업 대상지로 검토 중이에요." });
       if (r === null) return;
       await act(`/api/complaints/${id}`, "PATCH", { reply: r });
+      toast(r.trim() ? "답변을 저장했어요" : "답변을 지웠어요");
     }
   } catch { return; }
   refresh();
