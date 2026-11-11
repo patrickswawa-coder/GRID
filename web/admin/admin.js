@@ -38,7 +38,32 @@ async function getAdm(path) {
 }
 
 const STATUS = { received: "접수", working: "처리중", done: "처리 완료" };
-let state = { complaints: [], flagged: [], prio: [], meta: null, map: null, heat: null, env: null, hot: null, labels: [], filter: new Set(), sfilter: "" };
+let state = { complaints: [], flagged: [], prio: [], meta: null, map: null, heat: null, env: null, hot: null, labels: [], filter: new Set(), sfilter: "", sort: { key: "urgency", dir: -1 } };
+
+// 목록 열 정렬: 제목을 누르면 그 열로 정렬, 한 번 더 누르면 반대로. 같은 값끼리는 긴급도 → 공감 → 최근 순
+const STATUS_ORDER = { received: 0, working: 1, done: 2 };
+const SORT_COLS = [
+  { key: "id", label: "번호", num: true, first: -1, v: (c) => c.id },
+  { key: "urgency", label: "AI 긴급도", first: -1, v: (c) => c.ai_urgency || 0 },
+  { key: "likes", label: "공감", num: true, first: -1, v: (c) => c.likes },
+  { key: "type", label: "유형", first: 1, v: (c) => tLabel(c.type) },
+  { key: "zone", label: "구역", first: 1, v: (c, zn) => (zn[c.zone] || c.zone) },
+  { key: "text", label: "내용", first: 1, v: (c) => c.text },
+  { key: "status", label: "상태", first: 1, v: (c) => STATUS_ORDER[c.status] ?? 9 },
+  { key: "time", label: "접수", first: -1, v: (c) => c.created_at },
+];
+function sortRows(list, zn) {
+  const col = SORT_COLS.find((x) => x.key === state.sort.key) || SORT_COLS[1], d = state.sort.dir;
+  const cmp = (a, b) => (typeof a === "string" ? a.localeCompare(b, "ko") : a - b);
+  return [...list].sort((a, b) => d * cmp(col.v(a, zn), col.v(b, zn))
+    || (b.ai_urgency || 0) - (a.ai_urgency || 0) || b.likes - a.likes || b.id - a.id);
+}
+function sortLabel() {
+  const col = SORT_COLS.find((x) => x.key === state.sort.key), up = state.sort.dir > 0;
+  const word = { id: up ? "번호 작은 순" : "번호 큰 순", urgency: up ? "AI 긴급도 낮은 순" : "AI 긴급도 높은 순", likes: up ? "공감 적은 순" : "공감 많은 순",
+    time: up ? "오래된 순" : "최근 순", status: up ? "접수 → 처리 완료 순" : "처리 완료 → 접수 순" }[col.key] || `${col.label} ${up ? "가나다순" : "가나다 역순"}`;
+  return state.sort.key === "urgency" && !up ? "AI 긴급도 높은 순, 같으면 공감 많은 순" : `${word}, 같으면 긴급도·공감 순`;
+}
 
 // ---------------------------------------------------------------- 관리자 (로그인·상태 변경·삭제)
 const admin = { required: false, token: (() => { try { return sessionStorage.getItem("grid-admin") || ""; } catch { return ""; } })() };
@@ -426,7 +451,7 @@ function renderComplaints() {
 
   const head = ["번호", "AI 긴급도", "공감", "유형", "구역", "내용", "상태", "접수 시각", "답변"];
   // 정렬: AI 긴급도 높은 순 → 같으면 공감 많은 순 → 같으면 최근 순 (긴급도 판정 전·AI 미연결은 맨 아래)
-  const sorted = [...df].sort((a, b) => (b.ai_urgency || 0) - (a.ai_urgency || 0) || b.likes - a.likes || b.id - a.id);
+  const sorted = sortRows(df, zn);
   const csvRows = sorted.map((c) => [c.id, URGENCY[c.ai_urgency] || "", c.likes, tLabel(c.type), zn[c.zone] || c.zone, c.text, STATUS[c.status] || c.status, c.created_at.replace("T", " ").slice(0, 19), c.reply || ""]);
   const adm = canAdmin();
   const opts = (cur) => Object.entries(STATUS).map(([k, l]) => `<option value="${k}"${k === cur ? " selected" : ""}>${l}</option>`).join("");
@@ -440,11 +465,14 @@ function renderComplaints() {
     <td>${adm ? `<button class="mini" data-a="reply" type="button">답변</button>${isPublic(c)
       ? `<button class="mini" data-a="hide" type="button" title="시민 지도·통계에서 숨겨요 (삭제 아님)">숨기기</button>`
       : `<button class="mini ok" data-a="show" type="button" title="문제없으면 다시 공개해요">보이기</button>`}<button class="mini del" data-a="del" type="button">삭제</button>` : ""}</td></tr>`;
-  const shown = ["번호", "AI 긴급도", "공감", "유형", "구역", "내용", "상태", "접수", adm ? "관리" : ""];
-  $("list").innerHTML = `<tr>${shown.map((h, i) => `<th class="${[i === 0 || i === 2 ? "num" : "", i === 1 ? "sorted" : ""].join(" ").trim()}"${i === 1 ? ` aria-sort="descending"` : ""}>${h}</th>`).join("")}</tr>` + sorted.slice(0, 300).map(rowHtml).join("");
+  const th = SORT_COLS.map((col) => {
+    const on = state.sort.key === col.key, dir = on ? (state.sort.dir > 0 ? "ascending" : "descending") : "none";
+    return `<th class="${col.num ? "num" : ""}" aria-sort="${dir}"><button type="button" class="sort${on ? " on" : ""}" data-sort="${col.key}" title="눌러서 정렬">${col.label}<i aria-hidden="true">${on ? (state.sort.dir > 0 ? "▲" : "▼") : "↕"}</i></button></th>`;
+  }).join("") + `<th>${adm ? "관리" : ""}</th>`;
+  $("list").innerHTML = `<tr>${th}</tr>` + sorted.slice(0, 300).map(rowHtml).join("");
   const rows = csvRows;
   $("dl-list").onclick = () => download(`grid_민원_${stamp()}.csv`, csv([head, ...rows]));
-  $("updated").textContent = `AI 긴급도 높은 순, 같으면 공감 많은 순 · 마지막 갱신 ${new Date().toLocaleTimeString("ko-KR")}` + (rows.length > 300 ? ` · 화면에는 300건까지, CSV는 전체 ${rows.length}건` : "");
+  $("updated").textContent = `${sortLabel()} · 열 제목을 누르면 정렬을 바꿀 수 있어요 · 마지막 갱신 ${new Date().toLocaleTimeString("ko-KR")}` + (rows.length > 300 ? ` · 화면에는 300건까지, CSV는 전체 ${rows.length}건` : "");
 }
 
 // ---------------------------------------------------------------- AI 텍스트 (느리므로 따로, 5분 캐시)
@@ -469,6 +497,13 @@ $("list").addEventListener("change", async (e) => {
   const id = +sel.closest("tr").dataset.id;
   try { await act(`/api/complaints/${id}`, "PATCH", { status: sel.value }); } catch {}
   sel.blur(); refresh();
+});
+$("list").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-sort]");
+  if (!b) return;
+  const col = SORT_COLS.find((x) => x.key === b.dataset.sort);
+  state.sort = state.sort.key === col.key ? { key: col.key, dir: -state.sort.dir } : { key: col.key, dir: col.first };
+  renderComplaints();
 });
 $("list").addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-a]"); if (!btn) return;

@@ -198,4 +198,11 @@ tr.is-hidden td { color: var(--mute); }
 
 .cdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 .chip[aria-pressed="true"] .cdot { box-shadow: 0 0 0 1.5px #fff; }
-th.sorted::after { content: " ▼"; font-size: 9px; color: var(--cool-ink); }
+
+th .sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font: inherit; color: inherit; border-radius: 6px; padding: 2px 4px; margin: -2px -4px; }
+th .sort:hover { color: var(--ink); background: var(--mist); }
+th .sort:focus-visible { outline: 3px solid rgba(11, 143, 132, .5); }
+th .sort i { font-style: normal; font-size: 9px; color: #b5c2cc; }
+th .sort.on { color: var(--ink); }
+th .sort.on i { color: var(--cool-ink); }
+th.num .sort { flex-direction: row-reverse; }
