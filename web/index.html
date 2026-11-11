@@ -25,6 +25,9 @@
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" /> <path d="M12 8v6" /> <path d="M9 11h6" /></symbol>
     <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /> <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /></symbol>
+    <symbol id="i-landmark" viewBox="0 0 24 24"><path d="M10 18v-7" /> <path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" /> <path d="M14 18v-7" /> <path d="M18 18v-7" /> <path d="M3 22h18" /> <path d="M6 18v-7" /></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol>
+    <symbol id="i-mappin" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /> <circle cx="12" cy="10" r="3" /></symbol>
   </svg>
   <canvas id="view"></canvas>
 
@@ -59,12 +62,13 @@
   <aside id="report" class="report" aria-label="동네 환경 리포트">
     <div class="report-head"><h2>무실동 환경 리포트</h2><button id="report-close" class="x" type="button" aria-label="닫기"><svg class="ico"><use href="#i-close"/></svg></button></div>
     <a class="admin-link" href="admin/">
-      <span>🏛️</span><span><b>지자체 대시보드 보기</b><small>우리 동네 제안이 어떻게 분석되는지 확인해요</small></span><span>→</span>
+      <svg class="ico al-ic"><use href="#i-landmark"/></svg><span><b>지자체 대시보드 보기</b><small>우리 동네 제안이 어떻게 분석되는지 확인해요</small></span><svg class="ico"><use href="#i-chev"/></svg>
     </a>
     <section><h3>지금 날씨·공기</h3><div id="r-env" class="r-env">불러오는 중…</div></section>
-    <section><h3>🔥 열이 많이 쌓이는 곳 TOP 3</h3><ol id="r-hot" class="r-list"></ol><p class="hint">누르면 그곳으로 이동해요</p></section>
-    <section><h3>🌱 시민 제안 효과</h3><div id="r-sim"></div></section>
-    <section><h3>📢 유형별 제안·신고 <small>(눌러서 지도에서 숨기기)</small></h3><div id="r-types" class="r-types"></div></section>
+    <section class="r-mine-sec"><h3>내 제안 <small id="r-mine-n"></small></h3><ol id="r-mine" class="r-mine"></ol><p class="hint">누르면 그곳으로 이동해 처리 상태와 답변을 볼 수 있어요</p></section>
+    <section><h3>열이 많이 쌓이는 곳 TOP 3</h3><ol id="r-hot" class="r-list"></ol><p class="hint">누르면 그곳으로 이동해요</p></section>
+    <section><h3>시민 제안 효과</h3><div id="r-sim"></div></section>
+    <section><h3>유형별 제안·신고 <small>(눌러서 지도에서 숨기기)</small></h3><div id="r-types" class="r-types"></div></section>
     <section class="r-settings">
       <button id="tool-others" class="setting" type="button" aria-pressed="false">
         <svg class="ico"><use href="#i-pin"/></svg><span>다른 시민 제안 보기</span><i class="switch" aria-hidden="true"></i>
@@ -75,16 +79,16 @@
     </section>
   </aside>
 
-  <!-- 첫 방문 안내 -->
-  <div id="intro" class="intro" hidden>
+  <!-- 첫 방문 안내 (도움말 버튼으로 다시 열림) -->
+  <div id="intro" class="intro" hidden role="dialog" aria-modal="true" aria-labelledby="intro-title">
     <div class="intro-card">
-      <h2><span class="mark" aria-hidden="true">GRID</span> 열받을지도</h2>
+      <button id="intro-x" class="x intro-x" type="button" aria-label="닫기"><svg class="ico"><use href="#i-close"/></svg></button>
+      <h2 id="intro-title"><span class="mark" aria-hidden="true">GRID</span> 열받을지도</h2>
       <p class="intro-sub">내 골목 열섬을 보고, 시민이 직접 식히는 3D 지도예요.</p>
-      <ol>
-        <li>빨간 곳일수록 <b>여름에 열이 많이 쌓이는 곳</b>이에요.</li>
-        <li>바꾸고 싶은 곳을 <b>눌러서</b> 가로수·그늘막 같은 <b>개선 블록</b>을 놓아요. 놓기 전에 <b>지수가 얼마나 내려갈지</b> 보여드려요.</li>
-        <li>아래 <b>제안 반영 후</b>를 누르면 시민 제안이 모두 실현된 동네를 볼 수 있어요.</li>
-        <li>위쪽 <b>제안 수</b>를 누르면 다른 시민이 남긴 제안도 보고 공감할 수 있어요.</li>
+      <ol class="intro-steps">
+        <li><b>보기</b> 빨간 곳일수록 여름에 열이 많이 쌓여요.</li>
+        <li><b>놓기</b> 바꾸고 싶은 곳을 눌러 가로수·그늘막 같은 블록을 제안해요.</li>
+        <li><b>확인</b> 내 제안의 처리 상태와 답변을 리포트에서 봐요.</li>
       </ol>
       <details class="method">
         <summary>열섬 지수는 어떻게 계산하나요?</summary>
@@ -93,7 +97,10 @@
         <p>가중치는 <b>Landsat 위성 여름 지표온도</b>(2023~2025년 5장면)에 맞춰 정했어요. 위성 온도와 비교하면 <b>상관 0.88</b>이에요.</p>
         <p class="muted-note">땅 표면 온도 기준이라 기온과는 달라요. 10점 차이 ≈ 여름 한낮 표면 약 1.3°C. 기온·미세먼지는 기상청·에어코리아 실시간 값이에요.</p>
       </details>
-      <button id="intro-ok" class="primary" type="button">시작하기</button>
+      <div class="intro-actions">
+        <button id="intro-tour" class="primary" type="button">화면 둘러보기</button>
+        <button id="intro-ok" class="ghost" type="button">바로 시작</button>
+      </div>
       <a class="intro-admin" href="admin/">지자체 대시보드 보기</a>
     </div>
   </div>
@@ -125,9 +132,9 @@
       <div id="types-fix" class="types"></div>
       <div id="shapeBox" class="shape-box" hidden>
         <div class="seg" role="group" aria-label="놓는 방식">
-          <button type="button" data-shape="one" class="on">📍 한 곳</button>
-          <button type="button" data-shape="path">✍️ 자유 그리기</button>
-          <button type="button" data-shape="area">⬜ 네모 영역</button>
+          <button type="button" data-shape="one" class="on">한 곳</button>
+          <button type="button" data-shape="path">길 따라 그리기</button>
+          <button type="button" data-shape="area">네모 영역</button>
         </div>
         <div id="shapeHint" class="shape-hint" hidden></div>
       </div>
@@ -156,14 +163,14 @@
     <div class="actions">
       <small id="d-time" class="muted"></small>
       <button type="button" id="d-close" class="ghost">닫기</button>
-      <button type="button" id="d-like" class="primary">👍 공감</button>
+      <button type="button" id="d-like" class="primary">공감</button>
     </div>
   </section>
 
   <!-- 거리 QR로 들어왔을 때: 지금 계신 곳 -->
-  <div id="herePin" class="here-pin" hidden>📍<span>지금 계신 곳</span></div>
+  <div id="herePin" class="here-pin" hidden><svg class="pin-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg><span>지금 계신 곳</span></div>
   <section id="spotCard" class="spot-card" hidden aria-label="지금 계신 곳">
-    <div class="spot-name">📍 <b id="spotName"></b></div>
+    <div class="spot-name"><svg class="ico"><use href="#i-mappin"/></svg><b id="spotName"></b></div>
     <div id="spotHeat" class="spot-heat"></div>
     <button id="spotGo" class="primary" type="button">이곳에 의견 남기기</button>
     <button id="spotLook" class="ghost" type="button">동네 둘러보기</button>

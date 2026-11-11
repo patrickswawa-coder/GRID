@@ -376,3 +376,76 @@ body.spot-open .toast { bottom: calc(var(--safe-b) + 250px); }
 @media (min-width: 601px) {
   .dock { margin: 0; right: auto; width: 460px; }
 }
+
+/* ---------------------------------------------------------------- 11/11 멘토링 반영 */
+/* 유형 아이콘 (Lucide 선 아이콘, 유형 색) */
+.type .ic { display: grid; place-items: center; height: 24px; }
+.type .ic .ico { width: 22px; height: 22px; }
+.types.small .type .ic .ico { width: 18px; height: 18px; }
+.type.on .ic { color: var(--cool-ink) !important; }
+.rt-ic { display: grid; place-items: center; }
+.rt-ic .ico { width: 16px; height: 16px; }
+.ei-t { margin-right: 2px; }
+.al-ic { width: 22px; height: 22px; color: var(--cool-ink); }
+.admin-link svg:last-child { width: 16px; height: 16px; color: var(--cool-ink); }
+
+/* 상세 카드 */
+#d-type { display: inline-flex; align-items: center; gap: 6px; }
+.d-ic .ico { width: 18px; height: 18px; display: block; }
+.mine-chip { font-size: 11.5px; font-weight: 700; color: #fff; background: var(--ink); border-radius: 6px; padding: 2px 7px; margin-left: 4px; }
+.d-reply b { display: block; font-size: 12px; color: var(--cool-ink); margin-bottom: 2px; }
+#d-like { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+#d-like .ico { width: 18px; height: 18px; }
+
+/* 거리 QR 카드·현재 위치 핀 */
+.spot-name { display: flex; align-items: center; gap: 6px; }
+.spot-name .ico { width: 18px; height: 18px; color: var(--heat); flex: none; }
+.here-pin .pin-ic { display: block; margin: 0 auto; width: 30px; height: 30px; fill: var(--heat); stroke: #fff; stroke-width: 1.6; }
+.here-pin .pin-ic circle { fill: #fff; stroke: none; }
+
+/* 리포트: 내 제안 */
+.r-mine-sec { margin-top: 4px; }
+.r-mine-sec h3 small { margin-left: 4px; color: var(--cool-ink); font-weight: 700; }
+.r-mine { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.r-mine li[data-id] {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 12px; background: var(--mist); cursor: pointer; border: 1.5px solid transparent;
+}
+.r-mine li[data-id]:hover { border-color: var(--cool); }
+.mi-ic { width: 32px; height: 32px; border-radius: 9px; background: var(--surface); display: grid; place-items: center; }
+.mi-ic .ico { width: 18px; height: 18px; }
+.mi-main { min-width: 0; display: grid; }
+.mi-main b { font-size: 14px; }
+.mi-main small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi-empty { font-size: 13px; color: var(--muted); background: var(--mist); border-radius: 12px; padding: 12px; }
+.r-mine-sec .hint:empty, .r-mine:has(.mi-empty) + .hint { display: none; }
+
+/* 첫 안내창: 닫기 버튼, 세 단계, 버튼 두 개 */
+.intro-card { position: relative; }
+.intro-x { position: absolute; top: 12px; right: 12px; border: 0; background: var(--mist); border-radius: 12px; width: 38px; height: 38px; display: grid; place-items: center; cursor: pointer; color: var(--ink); }
+.intro-card h2 { padding-right: 44px; }
+.intro-steps { list-style: none; padding: 0 !important; display: grid; gap: 8px; }
+.intro-steps li { margin: 0 !important; display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: baseline; }
+.intro-steps li b { color: var(--cool-ink); }
+.intro-actions { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+.intro-actions .primary, .intro-actions .ghost { width: 100%; }
+
+/* 화면 둘러보기 */
+.tour { position: fixed; inset: 0; z-index: 60; }
+.tour-hole {
+  position: fixed; pointer-events: none; border-radius: 16px;
+  box-shadow: 0 0 0 3px #fff, 0 0 0 200vmax rgba(23, 50, 74, .6);
+  transition: left .25s ease, top .25s ease, width .25s ease, height .25s ease, border-radius .25s ease;
+}
+.tour-tip {
+  position: fixed; background: var(--surface); border-radius: 18px; padding: 14px 16px 12px; width: max-content;
+  box-shadow: 0 12px 36px rgba(23, 50, 74, .35); transition: left .25s ease, top .25s ease;
+}
+.tour-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.tour-n { font-family: var(--pixel); font-size: 11px; color: var(--cool-ink); }
+.tour-skip { border: 0; background: none; color: var(--muted); font-size: 13px; padding: 4px 2px; cursor: pointer; }
+.tour-title { display: block; font-size: 16px; letter-spacing: -.3px; }
+.tour-text { margin: 4px 0 12px; font-size: 14px; line-height: 1.55; color: var(--ink); }
+.tour-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.tour-actions button { padding: 9px 16px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .tour-hole, .tour-tip { transition: none; } }

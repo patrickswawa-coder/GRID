@@ -195,3 +195,7 @@ dialog input { display: block; width: 100%; margin-top: 4px; padding: 7px 9px; b
 tr.is-hidden td { color: var(--mute); }
 .mod { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 6px; background: #fde8e1; color: #b4401c; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
 .mini.ok:hover { border-color: var(--cool); color: var(--cool-ink); }
+
+.cdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.chip[aria-pressed="true"] .cdot { box-shadow: 0 0 0 1.5px #fff; }
+th.sorted::after { content: " ▼"; font-size: 9px; color: var(--cool-ink); }
