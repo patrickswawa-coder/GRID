@@ -1180,6 +1180,19 @@ function simStats(base, sim) {
 function proposals() {
   return [...markers.values()].map((m) => m.data).filter((c) => TYPE_BY_CODE[c.type]?.effect);
 }
+/** 환경 불편 신고 (쓰레기·악취·소음·기타 — 열섬 지수에는 영향 없음) */
+function reports() {
+  return [...markers.values()].map((m) => m.data).filter((c) => TYPE_BY_CODE[c.type] && !TYPE_BY_CODE[c.type].effect);
+}
+// 결과 카드의 신고 줄: 건수, 처리 완료, 유형별
+function setReportsHud(list) {
+  $("#simRepN").textContent = list.length;
+  $("#simRepDone").textContent = list.filter((c) => c.status === "done").length;
+  const by = {};
+  for (const c of list) by[c.type] = (by[c.type] || 0) + 1;
+  $("#simRepTypes").innerHTML = Object.entries(by).sort((a, b) => b[1] - a[1])
+    .map(([t, n]) => `<span>${esc(TYPE_BY_CODE[t]?.label || t)}<b>${n}</b></span>`).join("");
+}
 function setSim(on, quiet = false) {
   stopSimFx();
   simOn = on;
@@ -1190,7 +1203,9 @@ function setSim(on, quiet = false) {
     heatSim = computeHeat(map, buildMods(map, expandAll(proposals()), TYPE_BY_CODE));
     if (!heatOn) { simOn = false; setHeat(true, true); simOn = true; }
     const st = coolStats(map, heat, heatSim);
-    $("#simTitle").textContent = `시민 제안 ${proposals().length}건이 실현되면`;
+    $("#simTitle").textContent = `시민 의견 ${proposals().length + reports().length}건이 모이면`;
+    $("#simFixN").textContent = proposals().length;
+    setReportsHud(reports());
     $("#simCaption").hidden = true;
     $("#simPlay").textContent = "▶ 제안 재생";
     $("#simPlay").classList.remove("playing");
@@ -1235,8 +1250,10 @@ function stopSimFx() {
 // 시민 제안이 올라온 순서대로 하나씩 떨어지고, 놓일 때마다 주변이 하늘색으로 퍼지며 식어 간다
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function startReplay() {
-  const list = proposals().slice().sort((a, b) => (a.created_at || "").localeCompare(b.created_at || "") || a.id - b.id);
-  if (!list.length) { toast("아직 개선 제안이 없어요. 지도를 눌러 첫 제안을 해 보세요"); return; }
+  // 개선 제안과 신고를 올라온 순서대로 함께 — 제안은 지도를 식히고, 신고는 주황 고리로 접수만 표시
+  const fixes = proposals();
+  const list = fixes.concat(reports()).sort((a, b) => (a.created_at || "").localeCompare(b.created_at || "") || a.id - b.id);
+  if (!list.length) { toast("아직 시민 의견이 없어요. 지도를 눌러 첫 의견을 남겨 보세요"); return; }
   stopAnim?.(); stopAnim = null;
   replaying = true;
   const run = (replaying = {}); // 이번 재생 표시 (멈추면 다른 객체로 바뀜)
@@ -1244,10 +1261,12 @@ async function startReplay() {
   $("#simPlay").classList.add("playing");
   for (const c of list) { const m = markers.get(c.id); if (m) m.obj.visible = false; }
   paintHeat(world, map, heat, true);
-  const final = computeHeat(map, buildMods(map, expandAll(list), TYPE_BY_CODE));
+  const final = computeHeat(map, buildMods(map, expandAll(fixes), TYPE_BY_CODE));
   const region = regionOf(heat, final); // 최종 영향권 고정 → 재생 내내 같은 곳의 평균이 내려감
   let st0 = coolStats(map, heat, heat, region);
   setHud(st0, 1);
+  $("#simFixN").textContent = 0;
+  setReportsHud([]);
   controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
   const steps = Math.min(list.length, 18), per = Math.ceil(list.length / steps);
   let prev = heat, shown = 0;
@@ -1256,19 +1275,26 @@ async function startReplay() {
     for (const c of chunk) {
       const m = markers.get(c.id);
       if (m) { m.obj.visible = true; m.obj.userData.drop = 25; }
-      const r = (TYPE_BY_CODE[c.type]?.effect?.size || 9) / 2;
-      addRipple(scene, c.x + 0.5, heightAt(map, c.x, c.z), c.z + 0.5, r * 1.6);
+      const t = TYPE_BY_CODE[c.type];
+      if (t?.effect) addRipple(scene, c.x + 0.5, heightAt(map, c.x, c.z), c.z + 0.5, (t.effect.size || 9) / 2 * 1.6);
+      else addRipple(scene, c.x + 0.5, heightAt(map, c.x, c.z), c.z + 0.5, 6, 0xffa94d);
     }
     shown += chunk.length;
+    const seen = list.slice(0, shown);
+    const seenFix = seen.filter((c) => TYPE_BY_CODE[c.type]?.effect);
+    $("#simFixN").textContent = seenFix.length;
+    setReportsHud(seen.filter((c) => !TYPE_BY_CODE[c.type]?.effect));
     const last = chunk[chunk.length - 1];
     const dt = last.created_at ? new Date(last.created_at) : null;
     const when = dt ? `${dt.getMonth() + 1}/${dt.getDate()}` : "";
-    $("#simTitle").textContent = `시민 제안 ${shown} / ${list.length}건`;
+    $("#simTitle").textContent = `시민 의견 ${shown} / ${list.length}건`;
     $("#simCaption").hidden = false;
-    $("#simCaption").innerHTML = `<b>${esc(TYPE_BY_CODE[last.type]?.label || last.type)}</b> · ${when} · ${esc((last.text || "").slice(0, 40))}`;
+    const isFix = !!TYPE_BY_CODE[last.type]?.effect;
+    $("#simCaption").innerHTML = `<b class="${isFix ? "" : "rep"}">${isFix ? "" : "신고 · "}${esc(TYPE_BY_CODE[last.type]?.label || last.type)}</b> · ${when} · ${esc((last.text || "").slice(0, 40))}`;
     await sleep(30);
     if (replaying !== run) break;
-    const next = computeHeat(map, buildMods(map, expandAll(list.slice(0, shown)), TYPE_BY_CODE));
+    if (!chunk.some((c) => TYPE_BY_CODE[c.type]?.effect)) { await sleep(450); continue; } // 신고만 있는 묶음은 지도 그대로
+    const next = computeHeat(map, buildMods(map, expandAll(seenFix), TYPE_BY_CODE));
     const st = coolStats(map, heat, next, region), from = st0;
     await new Promise((res) => {
       stopAnim = animateBlend(world, map, prev, next, 650, { onFrame: (e) => setHud(st, e, from), onDone: res });
@@ -1287,7 +1313,9 @@ function endReplay(done) {
     heatSim = computeHeat(map, buildMods(map, expandAll(proposals()), TYPE_BY_CODE)); // 재생 중 새로 들어온 제안까지
     paintHeat(world, map, heatSim, true);
     setHud(coolStats(map, heat, heatSim));
-    $("#simTitle").textContent = `시민 제안 ${proposals().length}건이 실현되면`;
+    $("#simTitle").textContent = `시민 의견 ${proposals().length + reports().length}건이 모이면`;
+    $("#simFixN").textContent = proposals().length;
+    setReportsHud(reports());
     if (done) {
       $("#simCaption").innerHTML = "<b>시민 제안이 모일수록 동네가 시원해져요</b>";
       toast("모든 시민 제안을 반영했어요", 3000);
