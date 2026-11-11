@@ -533,3 +533,15 @@ body.sim-show .legend { display: none; }
   .sim-nums b { font-size: 21px; }
   .sim-nums small { font-size: 10.5px; }
 }
+
+.sim-sec-h { margin-top: 8px; font-size: 13px; color: #cfe3ef; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sim-sec-h b { color: #fff; font-size: 15px; }
+.sim-sec-h.rep { margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255, 255, 255, .14); }
+.sim-tag { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.sim-tag.fix { background: rgba(64, 200, 255, .2); color: #6fd8ff; }
+.sim-tag.rep { background: rgba(255, 169, 77, .2); color: #ffc078; }
+.sim-rep { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.sim-rep span { font-size: 12.5px; padding: 3px 9px; border-radius: 999px; background: rgba(255, 255, 255, .1); color: #e6eef4; white-space: nowrap; }
+.sim-rep span b { margin-left: 4px; color: #ffc078; }
+.sim-caption b.rep { color: #ffc078; }
+@media (max-width: 600px) { .sim-rep span { font-size: 11.5px; padding: 2px 7px; } .sim-sec-h { font-size: 12px; } }
