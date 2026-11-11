@@ -1,5 +1,5 @@
 #!/bin/bash
-# HTTPS 켜기 (서버에서 한 번):  bash ~/GRID/deploy/enable_https.sh grid7.duckdns.org [이메일]
+# HTTPS 켜기 (서버에서 한 번):  bash ~/GRID/deploy/enable_https.sh grid-team7.duckdns.org [이메일]
 #
 # 하는 일
 #  1) 도메인이 이 서버 IP를 가리키는지 확인
@@ -11,7 +11,7 @@ set -e
 DOMAIN="$1"; EMAIL="$2"
 if [ -z "$DOMAIN" ]; then
   echo "사용법: bash ~/GRID/deploy/enable_https.sh 도메인 [이메일]"
-  echo "  예)   bash ~/GRID/deploy/enable_https.sh grid7.duckdns.org"
+  echo "  예)   bash ~/GRID/deploy/enable_https.sh grid-team7.duckdns.org"
   exit 1
 fi
 

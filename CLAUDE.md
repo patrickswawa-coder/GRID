@@ -5,7 +5,7 @@
 
 ## 반드시 먼저 읽기
 - `docs/CONVENTIONS.md` — 좌표계, 데이터 형식, API, Git 규칙. **여기 적힌 형식/주소를 임의로 바꾸지 말 것.**
-- 내 파트 문서: `docs/parts/` 안의 해당 파일
+- 열섬 지수 계산·위성 보정: `docs/HEAT.md`
 
 ## 구조
 - `web/` 시민용 페이지. 빌드 도구 없음, ES 모듈 + `web/vendor/`의 three.js r160. npm/번들러 도입 금지.

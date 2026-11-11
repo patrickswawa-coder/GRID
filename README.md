@@ -19,9 +19,11 @@
 **시민 지도** (`web/`, 앱 설치 없이 폰·PC 브라우저)
 - 3D 복셀 지도 + 5m 칸마다 열섬 위험 지수 (0 시원함 ~ 100 뜨거움), 실시간 기온·초미세먼지
 - 개선 블록 6종(가로수·소공원·그늘막·쿨링포그·옥상녹화·투수 포장)을 한 곳·길·네모로 놓기, 놓기 전 효과 미리보기
-- '제안 반영 후': 시민 제안이 모두 실현된 동네의 열섬 지도
+- '제안 반영 후': 시민 제안이 모두 실현되면 지도가 서서히 식어 가고, 결과 카드에 영향권 지수 전→후·시원해진 면적·가장 많이 식은 곳(°C)과 환경 불편 신고 현황을 함께 표시
+- '▶ 제안 재생': 시민 의견이 올라온 순서대로 지도에 놓이며 동네가 식어 가는 타임랩스
 - 환경 불편 신고, 다른 시민 제안 보기·공감, 내 제안의 처리 상태·담당자 답변 확인
 - 거리 QR 모드: QR을 찍으면 그 자리로 바로 이동 (`?at=위도,경도&name=장소`), 처음 쓰는 사람을 위한 화면 둘러보기
+- 지도 보기: 큰길 중앙선·가장자리선, 멀리서는 중요한 곳만 보이는 이름표
 
 **지자체 대시보드** (`web/admin/`)
 - 우선 개선 구역 TOP 5: 200m 구역마다 열섬 지수 60% + 시민 요구 40%, 제안 실현 시 지수 변화
@@ -100,12 +102,21 @@ $env:SERVE_WEB="1"; $env:AI_ENABLED="0"; $env:POST_INTERVAL="0"; uvicorn main:ap
 
 [deploy/README.md](deploy/README.md) 참고. 요약: 서버에서 `cd ~/GRID && git pull --ff-only && ./deploy.sh`. HTTPS는 `deploy/enable_https.sh`.
 
-## 팀 문서
+## 문서
 
-- 데이터 형식·API·Git 규칙: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
-- 파트별 할 일: [docs/PLAN.md](docs/PLAN.md), [docs/parts/](docs/parts)
-- 변경 기록: [docs/CHANGES_1109.md](docs/CHANGES_1109.md)
+- 열섬 지수 계산법·위성 보정·한계: [docs/HEAT.md](docs/HEAT.md)
+- 데이터 형식·좌표계·API: [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
+- 서버 배포·HTTPS: [deploy/README.md](deploy/README.md)
 - 거리 QR 포스터: [docs/qr/](docs/qr/)
+
+## 폴더
+
+| 폴더 | 내용 |
+| --- | --- |
+| `web/` | 시민 3D 지도 (`js/` 지도·열섬·도로·이름표·연출, `data/` 변환된 지도), `web/admin/` 지자체 대시보드, `web/vendor/` three.js·ECharts·글꼴 |
+| `backend/` | FastAPI 서버 (`main.py` 민원 API, `heatmodel.py` 열섬·우선순위, `envdata.py` 실시간 대기·기상, `moderation.py` 부적절 민원 거르기), `tests/` |
+| `data/` | 공공데이터 → 3D 지도 변환, 위성 표면온도 받기·보정, 예시 민원, QR 만들기 |
+| `deploy/` | 서버 설정·HTTPS 스크립트 (`deploy.sh`는 맨 위 폴더) |
 
 ## 라이선스
 
