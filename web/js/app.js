@@ -1106,6 +1106,7 @@ function setHeat(on, quiet = false) {
   heatOn = on;
   if (!on && simOn) setSim(false, true);
   paintHeat(world, map, simOn ? heatSim : heat, on);
+  if (world.markings) world.markings.visible = !on; // 도로 표시는 '지도' 보기에서만
   $("#legend").hidden = !on;
   syncView();
   if (on && !quiet) toast("빨간 곳일수록 여름철 열이 많이 쌓이는 곳이에요", 3500);

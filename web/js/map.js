@@ -1,6 +1,7 @@
 // 3D 복셀 맵: voxels.json 읽기, 지면/건물/나무 그리기, 좌표 변환
 // 월드 좌표 1 = 격자 1칸(meta.cell m). 칸 (x, z)의 중심은 (x+0.5, ?, z+0.5)
 import * as THREE from "three";
+import { buildRoadMarkings } from "./roads.js";
 
 const GRASS = 0, ROAD = 1, SIDEWALK = 2, PARK = 3, WATER = 4;
 const GROUND_COLORS = [
@@ -268,8 +269,11 @@ export function buildScene(map) {
   const trees = buildTrees(map);
   group.add(trees);
 
+  let markings = null; // 큰길 중앙선·가장자리선 (실패해도 지도는 그대로)
+  try { markings = buildRoadMarkings(map); group.add(markings); } catch (e) { console.warn("도로 표시 생략", e); }
+
   // 열섬 레이어(heat.js)가 색을 바꿨다 되돌릴 수 있게 원본을 같이 넘긴다
-  return { group, ground, buildings: mesh, trees, groundTex, groundBase: tex.slice(), roofBase: aRoof.slice() };
+  return { group, ground, buildings: mesh, trees, markings, groundTex, groundBase: tex.slice(), roofBase: aRoof.slice() };
 }
 
 // 공원·임야에는 숲, 도로변 인도에는 가로수
