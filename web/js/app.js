@@ -192,8 +192,10 @@ async function start() {
   setInterval(poll, POLL_MS);
   $("#loading").remove();
   if (SPOT_Q && enterSpot()) return; // 거리 QR: 안내 없이 바로 그 자리로
+  // 첫 안내창: 주소로 새로 들어올 때마다 보여준다 (심사·시연용 노트북처럼 전에 열어 본 브라우저에서도).
+  // 같은 탭에서 새로고침하면 다시 띄우지 않는다.
   let seen = false;
-  try { seen = localStorage.getItem("grid-intro") === "1"; } catch {}
+  try { seen = sessionStorage.getItem("grid-intro") === "1"; } catch {}
   if (!seen && !new URLSearchParams(location.search).has("demo")) $("#intro").hidden = false;
   else toast("바꾸고 싶은 곳을 눌러 주세요", 3500);
 }
@@ -757,7 +759,7 @@ const DEFAULT_ONE = controls.touches.ONE, DEFAULT_LEFT = controls.mouseButtons.L
 // drawing 은 위 '상태'에서 선언 (loop()가 첫 프레임부터 읽어서 여기서 선언하면 시작 직후 오류)
 let drawRaf = 0;
 function drawMode() {
-  return !!(selected && chosenType && shape !== "one" && $("#sheet").classList.contains("peek"));
+  return !!(selected && chosenType && shape !== "one" && (isWide() ? $("#sheet").classList.contains("open") : $("#sheet").classList.contains("peek")));
 }
 function syncDrawControls() {
   const d = drawMode();
@@ -949,6 +951,11 @@ $("#text").addEventListener("input", updateSubmit);
 
 // 아래 시트가 화면을 가리는 만큼 3D 화면 중심을 위로 올린다
 function liftView(sheetEl) {
+  if (sheetEl && isWide()) { // 왼쪽 패널만큼 시점을 오른쪽으로
+    const right = sheetEl.offsetLeft + sheetEl.offsetWidth; // 열리는 중 움직임(transform)과 상관없이 자리 기준
+    camera.setViewOffset(innerWidth, innerHeight, -(right + 12) / 2, 0, innerWidth, innerHeight);
+    return;
+  }
   let h = sheetEl ? sheetEl.getBoundingClientRect().height : 0;
   if (sheetEl && sheetEl.classList.contains("peek")) h = peekHeight();
   if (h) camera.setViewOffset(innerWidth, innerHeight, 0, h / 2, innerWidth, innerHeight);
@@ -962,7 +969,11 @@ function peekHeight() {
   const top = $("#sheet-top");
   return top.offsetTop + top.offsetHeight + 4;
 }
+// 넓은 화면(PC): 제안 창은 왼쪽 패널 — 접는 단계 없이 바로 펼치고, 지도는 오른쪽 남은 곳 가운데로
+const WIDE = matchMedia("(min-width: 1000px)");
+const isWide = () => WIDE.matches;
 function setPeek(peek) {
+  if (isWide()) peek = false;
   const sh = $("#sheet");
   sh.classList.toggle("peek", peek);
   sh.style.setProperty("--peek", peekHeight() + "px");
@@ -982,7 +993,7 @@ function openSheet(peek = true) {
 (() => {
   const top = $("#sheet-top"), sh = $("#sheet");
   let y0 = null, moved = 0;
-  top.addEventListener("pointerdown", (e) => { y0 = e.clientY; moved = 0; top.setPointerCapture(e.pointerId); });
+  top.addEventListener("pointerdown", (e) => { if (isWide()) return; y0 = e.clientY; moved = 0; top.setPointerCapture(e.pointerId); });
   top.addEventListener("pointermove", (e) => {
     if (y0 == null) return;
     moved = e.clientY - y0;
@@ -1004,7 +1015,7 @@ function openSheet(peek = true) {
   };
   top.addEventListener("pointerup", end);
   top.addEventListener("pointercancel", end);
-  top.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setPeek(!sh.classList.contains("peek")); } });
+  top.addEventListener("keydown", (e) => { if (!isWide() && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setPeek(!sh.classList.contains("peek")); } });
 })();
 function closeSheet() {
   $("#sheet").classList.remove("open", "peek");
@@ -1229,7 +1240,7 @@ $("#tool-help").onclick = () => { $("#intro").hidden = false; $("#intro-tour").f
 function closeIntro(quiet = false) {
   if ($("#intro").hidden) return;
   $("#intro").hidden = true;
-  try { localStorage.setItem("grid-intro", "1"); } catch {}
+  try { sessionStorage.setItem("grid-intro", "1"); localStorage.setItem("grid-intro", "1"); } catch {}
   if (!heatOn) setHeat(true, true);
   if (!quiet) toast("바꾸고 싶은 곳을 눌러 주세요", 3000);
 }
@@ -1257,12 +1268,16 @@ const TOUR = [
     text: () => (HOVER ? "지도 위에 마우스를 올리면 그곳의 열섬 지수를 알려드려요." : "지도를 움직이면 가운데 동그라미가 가리키는 곳의 열섬 지수를 알려드려요.") },
   { el: center(46), round: true, title: "블록 놓아 제안하기",
     text: "바꾸고 싶은 곳을 누르면 가로수·그늘막 같은 개선 블록을 놓을 수 있어요. 놓기 전에 지수가 얼마나 내려갈지 먼저 보여드려요." },
+  { el: () => $("#mouseHint"), title: "마우스로 지도 움직이기",
+    text: "드래그하면 이동, 오른쪽 버튼으로 드래그하면 회전, 휠로 확대·축소해요." },
   { el: () => $(".view-switch"), title: "지도 보기 바꾸기",
     text: "'열섬'은 열 지도, '지도'는 색 없이 동네 모습, '제안 반영 후'는 시민 제안이 모두 실현된 모습이에요." },
   { el: () => $("#count-btn"), title: "다른 시민 제안",
     text: "지금까지 모인 제안 수예요. 누르면 다른 시민의 제안이 지도에 나타나고, 눌러서 공감할 수 있어요." },
   { el: () => $("#tool-report"), title: "리포트와 내 제안",
     text: "내가 남긴 제안의 처리 상태와 담당자 답변, 열이 많이 쌓이는 곳 TOP 3를 볼 수 있어요." },
+  { el: () => $(".admin-btn"), title: "지자체 대시보드",
+    text: "시민 제안이 모이면 지자체는 이 화면에서 열섬 데이터와 합쳐 어디부터 개선할지 정해요." },
   { el: () => $("#tool-help"), title: "도움말",
     text: "이 안내는 언제든 여기서 다시 볼 수 있어요." },
 ];
