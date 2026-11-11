@@ -164,7 +164,7 @@ async function start() {
   }
   world = buildScene(map);
   scene.add(world.group);
-  labels = await loadLabels("data/labels.json");
+  labels = await loadLabels("data/labels.json", Math.max(map.meta.width, map.meta.depth) * 0.6 * 0.45); // 처음 위치 카메라 높이 ≈ 기준
   scene.add(labels.group);
   heat = computeHeat(map);
   baseAvg = meanHeat(heat);

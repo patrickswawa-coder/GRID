@@ -1,52 +1,73 @@
-// 큰 건물·아파트·학교 이름표. 겹치면 중요도(rank) 낮은 것부터 숨긴다.
+// 큰 건물·아파트·학교 이름표 — 지도 앱처럼: 반투명 흰 알약 + 종류별 색 점 + 굵은 글씨 (이모지 없음)
+// 멀리서는 중요한 곳(rank 낮은 순) 몇 개만, 가까이 갈수록 더 보여준다. 겹치면 덜 중요한 것을 숨긴다.
 import * as THREE from "three";
 
-const ICON = { apt: "🏢", school: "🏫", public: "🏛️", transit: "🚌", shop: "🛍️", park: "🌳" };
-const COLOR = { apt: "#2f6fed", school: "#f08c00", public: "#9c36b5", transit: "#e8590c", shop: "#495057", park: "#2f9e44" };
-const PX = innerWidth < 500 ? 22 : 30; // 이름표 화면 높이(px) 목표 (폰은 작게)
+const COLOR = { apt: "#4f6a8f", school: "#d9822b", public: "#7048b8", transit: "#e8590c", shop: "#6c757d", park: "#2f9e44" };
+const MOBILE = innerWidth < 500;
+const PX = MOBILE ? 24 : 28; // 이름표(알약) 화면 높이(px)
+const BASE_N = MOBILE ? 7 : 12; // 처음 위치에서 보이는 최대 개수
+const FONT = "-apple-system, BlinkMacSystemFont, 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif";
+
+function pill(ctx, x, y, w, h) { // roundRect 없는 옛 브라우저 대비
+  const r = h / 2;
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2);
+  ctx.lineTo(x + r, y + h); ctx.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
+}
 
 function makeTexture(text, kind) {
-  // 고해상도 화면에서도 글자가 흐리지 않게 2배 크기로 그린다
-  const K = 2;
-  const font = `600 ${34 * K}px -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif`;
+  // 화면에 그려질 크기 × 화면 배율 × 1.5 로 그려서 살짝만 줄여 씀 → 계단(픽셀) 없이 매끈
+  const R = Math.min(devicePixelRatio || 1, 2) * 1.5;
+  const H = Math.round(PX * R), FS = Math.round(H * 0.5), M = Math.round(3 * R); // M: 그림자 여백
+  const DOT = Math.round(H * 0.16), PADL = Math.round(H * 0.32), GAP = Math.round(H * 0.2), PADR = Math.round(H * 0.38);
+  const font = `700 ${FS}px ${FONT}`;
   const cv = document.createElement("canvas");
   const ctx = cv.getContext("2d");
   ctx.font = font;
-  const label = `${ICON[kind] || "📍"} ${text}`;
-  const w = Math.ceil(ctx.measureText(label).width) + 40 * K, h = 60 * K;
-  cv.width = w; cv.height = h;
+  const tw = Math.ceil(ctx.measureText(text).width);
+  const w = PADL + DOT * 2 + GAP + tw + PADR;
+  cv.width = w + M * 2; cv.height = H + M * 2;
+  // 반투명 흰 알약 + 옅은 그림자
+  ctx.save();
+  ctx.shadowColor = "rgba(23,50,74,0.18)"; ctx.shadowBlur = 3 * R; ctx.shadowOffsetY = 1 * R;
+  ctx.beginPath(); pill(ctx, M, M, w, H);
+  ctx.fillStyle = "rgba(255,255,255,0.74)"; ctx.fill();
+  ctx.restore();
+  ctx.lineWidth = Math.max(1, R * 0.6); ctx.strokeStyle = "rgba(23,50,74,0.10)"; ctx.stroke();
+  // 점 (종류별 색)
+  const cx = M + PADL + DOT, cy = M + H / 2;
+  ctx.beginPath(); ctx.arc(cx, cy, DOT, 0, Math.PI * 2);
+  ctx.fillStyle = COLOR[kind] || "#495057"; ctx.fill();
+  // 굵은 글씨
   ctx.font = font;
-  ctx.fillStyle = "rgba(255,255,255,0.94)";
-  ctx.strokeStyle = COLOR[kind] || "#495057";
-  ctx.lineWidth = 4 * K;
-  ctx.beginPath();
-  ctx.roundRect(2 * K, 2 * K, w - 4 * K, h - 4 * K, 26 * K);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#1d2433";
   ctx.textBaseline = "middle";
-  ctx.fillText(label, 20 * K, h / 2 + 2 * K);
+  ctx.fillStyle = "#17324a";
+  ctx.fillText(text, cx + DOT + GAP, cy + R * 0.5);
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
   t.minFilter = THREE.LinearMipmapLinearFilter;
-  return { t, aspect: w / h };
+  t.magFilter = THREE.LinearFilter;
+  return { t, aspect: cv.width / cv.height, anchor: cx / cv.width, scaleH: cv.height / H };
 }
 
-export async function loadLabels(url) {
+const isMinor = (d) => d.kind === "shop" || (d.kind === "park" && /어린이공원|소공원/.test(d.name));
+
+export async function loadLabels(url, refY = 160) {
   let list = [];
   try {
     const r = await fetch(url);
     if (r.ok) list = await r.json();
   } catch {}
+  list = list.slice().sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
   const group = new THREE.Group();
   const items = list.map((l) => {
-    const { t, aspect } = makeTexture(l.name, l.kind);
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+    const { t, aspect, anchor, scaleH } = makeTexture(l.name, l.kind);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, opacity: 0.96 }));
     s.material.sizeAttenuation = false;
-    s.position.set(l.x + 0.5, l.h + 2.5, l.z + 0.5);
+    s.center.set(anchor, 0.5); // 점이 건물 위에 오도록
+    s.position.set(l.x + 0.5, l.h + 1.5, l.z + 0.5);
     s.renderOrder = 5;
-    s.userData = { ...l, aspect };
+    s.userData = { ...l, aspect, anchor, scaleH };
     group.add(s);
     return s;
   });
@@ -57,22 +78,24 @@ export async function loadLabels(url) {
     const now = performance.now();
     if (!force && now - last < 150) return;
     last = now;
-    // 화면에서 PX 높이가 되도록 크기 계산 (sizeAttenuation=false 기준)
     const k = PX / (viewH * 0.5 * camera.projectionMatrix.elements[5]);
-    const dist = camera.position.distanceTo(new THREE.Vector3(camera.position.x, 0, camera.position.z)) ;
+    const y = Math.max(camera.position.y, 1);
+    const zoom = refY / y; // 1 = 처음 위치, 클수록 가까이
+    const maxN = Math.round(Math.min(80, BASE_N * Math.pow(zoom, 1.4)));
     const taken = [];
+    let n = 0;
     for (const s of items) {
       const d = s.userData;
-      s.scale.set(k * d.aspect, k, 1);
+      s.scale.set(k * d.scaleH * d.aspect, k * d.scaleH, 1);
       v.copy(s.position).project(camera);
-      let show = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
-      if (show && d.kind === "shop" && dist > 120) show = false; // 멀리서는 상가 이름 생략
+      let show = n < maxN && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      if (show && isMinor(d) && zoom < 1.8) show = false; // 멀리서는 상가·어린이공원 생략
       if (show) {
-        const cx = (v.x + 1) / 2 * viewW, cy = (1 - v.y) / 2 * viewH;
-        const hw = (PX * d.aspect) / 2 + 4, hh = PX / 2 + 3;
-        const r = [cx - hw, cy - hh, cx + hw, cy + hh];
+        const px = (v.x + 1) / 2 * viewW, py = (1 - v.y) / 2 * viewH;
+        const w = PX * d.scaleH * d.aspect;
+        const r = [px - w * d.anchor - 6, py - PX / 2 - 6, px + w * (1 - d.anchor) + 6, py + PX / 2 + 6];
         if (taken.some((o) => r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1])) show = false;
-        else taken.push(r);
+        else { taken.push(r); n++; }
       }
       s.visible = show;
     }
