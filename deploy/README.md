@@ -58,11 +58,11 @@ cd ~/GRID/data && ../.venv/bin/pip install -q numpy && ../.venv/bin/python seed_
 1. **도메인 만들기 (무료, 5분):** https://www.duckdns.org 에 구글/깃허브로 로그인 → `sub domain` 에 이름(예: `grid7`) 입력 → **add domain** → `current ip` 가 `32.190.9.9` 인지 확인 (아니면 고치고 **update ip**)
 2. **서버에서 한 줄:**
    ```bash
-   cd ~/GRID && git pull --ff-only && bash deploy/enable_https.sh grid7.duckdns.org
+   cd ~/GRID && git pull --ff-only && bash deploy/enable_https.sh grid-team7.duckdns.org
    ```
    인증서 발급(자동 갱신) → nginx 를 443으로 → `http://32.190.9.9`·`http://도메인` 은 자동으로 `https://도메인` 으로 이동 (이미 뽑은 QR도 동작)
-3. **QR 포스터 다시 만들기:** `python data/make_qr.py https://grid7.duckdns.org/ --spots data/qr_spots.csv`
-4. 네이버 지도를 쓰면: 네이버 클라우드 콘솔 → Maps → 애플리케이션 → **Web 서비스 URL** 에 `https://grid7.duckdns.org` 추가 (안 하면 관리자 화면 지도가 인증 오류)
+3. **QR 포스터 다시 만들기:** `python data/make_qr.py https://grid-team7.duckdns.org/ --spots data/qr_spots.csv`
+4. 네이버 지도를 쓰면: 네이버 클라우드 콘솔 → Maps → 애플리케이션 → **Web 서비스 URL** 에 `https://grid-team7.duckdns.org` 추가 (안 하면 관리자 화면 지도가 인증 오류)
 
 - 이후 업데이트는 그대로 `~/GRID/deploy.sh`. `setup_server.sh` 를 다시 돌려도 HTTPS 설정은 유지됨 (http 로 되돌리려면 `FORCE_HTTP=1`)
 - HTTPS 에서만 시민 화면에 **📍 내 위치** 버튼이 보임 (브라우저가 http 에서는 위치를 막음)
