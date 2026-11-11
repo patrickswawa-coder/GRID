@@ -191,7 +191,12 @@ def zone_key(x, z, s):
     return f"{chr(65 + x // s)}{z // s + 1}"
 
 
-def zone_name(zone, s, labels):
+DIRS = ("북", "북동", "동", "남동", "남", "남서", "서", "북서")
+
+
+def zone_name(zone, s, labels, cell=5.0):
+    """구역 코드(H13) 대신 사람이 알아보는 이름. 가까우면 'X 주변', 멀면 'X 남쪽 300m'.
+    web/js/app.js nearestLabel() 과 같은 규칙 (둘을 같이 고칠 것)."""
     zx, zz = ord(zone[0]) - 65, int(zone[1:]) - 1
     cx, cz = zx * s + s / 2, zz * s + s / 2
     best, bd = None, 1e9
@@ -199,7 +204,23 @@ def zone_name(zone, s, labels):
         d = math.hypot(l["x"] - cx, l["z"] - cz)
         if d < bd:
             best, bd = l, d
-    return f"{best['name']} 주변" if best and bd < s * 1.2 else f"구역 {zone}"
+    if not best:
+        return f"구역 {zone}"
+    if bd < s * 0.5:
+        return f"{best['name']} 주변"
+    # 지도 x = 동쪽, z = 남쪽
+    ang = math.degrees(math.atan2(cx - best["x"], best["z"] - cz)) % 360
+    m = max(50, round(bd * cell / 50) * 50)
+    return f"{best['name']} {DIRS[int((ang + 22.5) // 45) % 8]}쪽 {m}m"
+
+
+def zone_label(code):
+    """민원의 구역 코드 → 사람이 읽는 이름 (AI 요약 등에서 'M 구역' 같은 코드가 나오지 않게)."""
+    try:
+        st = _load(); m = st["meta"]
+        return zone_name(str(code).upper(), m.get("zone_size", 40), st["labels"], m.get("cell", 5.0))
+    except (ValueError, IndexError, TypeError):
+        return str(code)
 
 
 def priority(complaints):
@@ -248,7 +269,7 @@ def priority(complaints):
             continue  # 지도 가장자리의 얇은 조각 구역 (heat.js zoneHeat 와 같은 기준)
         z["score"] = round(0.6 * z["heat"] + 0.4 * 100 * math.sqrt(demand[k] / dmax), 1)
         z["top_type"] = max(z["types"], key=z["types"].get) if z["types"] else None
-        z["name"] = zone_name(k, s, st["labels"])
+        z["name"] = zone_name(k, s, st["labels"], m.get("cell", 5.0))
         for f in ("heat", "heat_p90", "heat_after", "lat", "lng"):
             z[f] = round(z[f], 6 if f in ("lat", "lng") else 1)
         for f in ("built", "paved", "green"):
