@@ -197,6 +197,7 @@ def main():
     ap.add_argument("--floors-col"); ap.add_argument("--height-col"); ap.add_argument("--use-col")
     ap.add_argument("--inspect", action="store_true", help="컬럼만 출력하고 종료")
     ap.add_argument("--out", default=str(vf.OUT))
+    ap.add_argument("--name", default="원주시 무실동", help="화면 위에 보일 동네 이름")
     a = ap.parse_args()
 
     w, s, e, n = a.bbox
@@ -253,7 +254,7 @@ def main():
     rasterize(geoms[order], hblocks[order], xs, ys, heights)
     rasterize(geoms[order], np.array(kinds_v)[order], xs, ys, kinds)
 
-    vf.save(a.out, name="원주시 무실동", cell=a.cell, origin_lat=n, origin_lng=w,
+    vf.save(a.out, name=a.name, cell=a.cell, origin_lat=n, origin_lng=w,
             ground=ground, heights=heights, kinds=kinds, source="vworld",
             tm={"crs": METRIC, "x0": round(mx0, 3), "y1": round(my1, 3)})  # 격자 원점: 정확한 경위도 변환용
 

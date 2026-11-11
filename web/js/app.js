@@ -396,7 +396,7 @@ function loop() {
       obj.position.y = obj.userData.baseY + obj.userData.drop;
     }
   }
-  if (labels) labels.update(camera, innerHeight, innerWidth);
+  if (labels) labels.update(camera, innerHeight, innerWidth, false, pinAvoid());
   if (spot) updatePin();
   if (!drawing) syncDrawControls();
   updateProbe();
@@ -618,6 +618,16 @@ function onTap(px, py) {
 }
 
 // 화면에서 (px,py)가 선택 표시(파란 핀·기둥 아래쪽 바닥)를 눌렀는지
+// 고른 곳의 핀(기둥 + 머리) 둘레는 장소 이름표가 가리지 않게 비워 둔다
+function pinAvoid() {
+  if (!cursor.visible) return [];
+  const v = new THREE.Vector3();
+  const top = cursorPin.getWorldPosition(v).project(camera).clone(), base = cursor.position.clone().project(camera);
+  if (top.z > 1 || base.z > 1) return [];
+  const sx = (q) => (q.x + 1) / 2 * innerWidth, sy = (q) => (1 - q.y) / 2 * innerHeight;
+  const x = sx(top);
+  return [[Math.min(x, sx(base)) - 34, sy(top) - 40, Math.max(x, sx(base)) + 34, sy(base) + 20]];
+}
 function hitsCursor(px, py) {
   if (!cursor.visible) return false;
   const v = new THREE.Vector3();
